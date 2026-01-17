@@ -1,4 +1,4 @@
-module github.com/manatsanan0209/vibe-voyage-backend
+module github.com/manatsanan0209/Vibe-Voyage_Backend
 
 go 1.24.5
 
