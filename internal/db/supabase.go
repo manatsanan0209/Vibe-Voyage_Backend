@@ -7,14 +7,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/joho/godotenv"
 )
 
 const SupabaseDatabaseURLKey = "SUPABASE_DB_URL"
 
 func Connect(ctx context.Context) (*pgxpool.Pool, error) {
-	_ = godotenv.Load()
-
 	databaseURL := os.Getenv(SupabaseDatabaseURLKey)
 	if databaseURL == "" {
 		return nil, errors.New("SUPABASE_DB_URL is not set")
