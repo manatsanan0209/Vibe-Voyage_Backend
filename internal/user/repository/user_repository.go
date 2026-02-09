@@ -2,24 +2,49 @@ package repository
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/gorm"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 )
 
 type pgUserRepository struct {
-	pool *pgxpool.Pool
+	db *gorm.DB
 }
 
-func NewUserRepository(pool *pgxpool.Pool) domain.UserRepository {
-	return &pgUserRepository{pool: pool}
+func NewUserRepository(db *gorm.DB) domain.UserRepository {
+	return &pgUserRepository{db: db}
 }
 
 func (r *pgUserRepository) Create(ctx context.Context, user *domain.User) error {
-	sql := `INSERT INTO users (email, name) VALUES ($1, $2) RETURNING id`
-	return r.pool.QueryRow(ctx, sql, user.Email, user.Name).Scan(&user.ID)
+	err := r.db.WithContext(ctx).Create(user).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (r *pgUserRepository) GetByID(ctx context.Context, id int) (*domain.User, error) {
-	// ... logic query ...
-	return &domain.User{ID: id, Name: "Mock User"}, nil // ตัวอย่าง
+func (r *pgUserRepository) GetByID(ctx context.Context, id uint) (*domain.User, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).First(&user, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *pgUserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (r *pgUserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	var user domain.User
+	err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
 }

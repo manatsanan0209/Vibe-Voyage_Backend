@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"errors"
+
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 )
 
@@ -14,14 +14,18 @@ func NewUserService(repo domain.UserRepository) domain.UserService {
 	return &userService{repo: repo}
 }
 
-func (s *userService) Register(ctx context.Context, user *domain.User) error {
-	if user.Email == "" {
-		return errors.New("email is required")
-	}
-	// ... hash password, validate logic, etc. ...
+func (s *userService) CreateUser(ctx context.Context, user *domain.User) error {
 	return s.repo.Create(ctx, user)
 }
 
-func (s *userService) FindUser(ctx context.Context, id int) (*domain.User, error) {
+func (s *userService) GetUserByID(ctx context.Context, id uint) (*domain.User, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *userService) GetUserByUsername(ctx context.Context, username string) (*domain.User, error) {
+	return s.repo.GetByUsername(ctx, username)
+}
+
+func (s *userService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
+	return s.repo.GetByEmail(ctx, email)
 }

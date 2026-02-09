@@ -1,42 +1,41 @@
 package db
 
 import (
-	"context"
 	"errors"
+	"log"
 	"os"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 const SupabaseDatabaseURLKey = "SUPABASE_DB_URL"
 
-func Connect(ctx context.Context) (*pgxpool.Pool, error) {
+func Connect() (*gorm.DB, error) {
 	databaseURL := os.Getenv(SupabaseDatabaseURLKey)
 	if databaseURL == "" {
 		return nil, errors.New("SUPABASE_DB_URL is not set")
 	}
 
-	config, err := pgxpool.ParseConfig(databaseURL)
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		logger.Config{
+			SlowThreshold: 1 * time.Second,
+			LogLevel: logger.Info,
+			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      false,
+			Colorful:                  true,
+		},
+	)
+
+	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
+		Logger: newLogger,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	pool, err := pgxpool.NewWithConfig(connectCtx, config)
-	if err != nil {
-		return nil, err
-	}
-
-	pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
-	defer pingCancel()
-
-	if err := pool.Ping(pingCtx); err != nil {
-		pool.Close()
-		return nil, err
-	}
-
-	return pool, nil
+	return db, nil
 }
