@@ -4,6 +4,8 @@ import (
 	"log"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/joho/godotenv"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/db"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
@@ -31,6 +33,15 @@ func Run() error {
 	log.Println("Database Migration Completed!")
 
 	app := fiber.New()
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
+	}))
+	app.Use(logger.New(logger.Config{
+		TimeFormat: "2006-01-02 15:04:05",
+		Format:     "${time} | ${status} | ${latency} | ${method} ${path}\n",
+	}))
 
 	repo := userRepo.NewUserRepository(gormDB)
 	svc := userService.NewUserService(repo)
