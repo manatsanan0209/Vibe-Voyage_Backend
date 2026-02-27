@@ -13,8 +13,12 @@ import (
 	userRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user/repository"
 	userService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user/service"
 
+	attractionPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction"
 	authPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth"
 	healthPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/health"
+	hotelPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/hotel"
+	placePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place"
+	restaurantPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant"
 	userPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user"
 )
 
@@ -49,6 +53,11 @@ func Run() error {
 	healthPkg.RegisterRoutes(app)
 	userPkg.Setup(app, svc)
 	authPkg.Setup(app, repo)
+
+	placePkg.Setup(app, gormDB)
+	attractionPkg.Setup(app, gormDB)
+	hotelPkg.Setup(app, gormDB)
+	restaurantPkg.Setup(app, gormDB)
 
 	return app.Listen(":8080")
 }
