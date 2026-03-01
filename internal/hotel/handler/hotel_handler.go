@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
@@ -20,6 +22,7 @@ func (h *hotelHandler) RegisterRoutes(app *fiber.App) {
 	api := app.Group("/api/hotels")
 	api.Get("/accommodation-types", h.GetAccommodationTypes)
 	api.Get("/price-ranges", h.GetPriceRanges)
+	api.Get("/search", h.GetByName)
 	api.Get("/", h.List)
 	api.Get("/:id", h.GetByID)
 }
@@ -112,5 +115,59 @@ func (h *hotelHandler) GetPriceRanges(c *fiber.Ctx) error {
 		Status:  fiber.StatusOK,
 		Message: "success",
 		Data:    &ranges,
+	})
+}
+
+func (h *hotelHandler) GetByName(c *fiber.Ctx) error {
+	name := c.Query("name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.APIResponse[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "name query parameter is required",
+			Error:   "missing name",
+		})
+	}
+
+	hotels, err := h.svc.GetHotelByName(c.Context(), name)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.APIResponse[any]{
+			Status:  fiber.StatusInternalServerError,
+			Message: "failed to search hotel by name",
+			Error:   err.Error(),
+		})
+	}
+
+	fields := c.Query("fields", "*")
+	if fields == "*" {
+		return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]*domain.Hotel]{
+			Status:  fiber.StatusOK,
+			Message: "success",
+			Data:    &hotels,
+		})
+	}
+
+	fieldSet := make(map[string]bool)
+	for _, f := range strings.Split(fields, ",") {
+		fieldSet[strings.TrimSpace(f)] = true
+	}
+
+	result := make([]map[string]interface{}, 0, len(hotels))
+	for _, h := range hotels {
+		b, _ := json.Marshal(h)
+		var m map[string]interface{}
+		_ = json.Unmarshal(b, &m)
+		filtered := make(map[string]interface{})
+		for k, v := range m {
+			if fieldSet[k] {
+				filtered[k] = v
+			}
+		}
+		result = append(result, filtered)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]map[string]interface{}]{
+		Status:  fiber.StatusOK,
+		Message: "success",
+		Data:    &result,
 	})
 }

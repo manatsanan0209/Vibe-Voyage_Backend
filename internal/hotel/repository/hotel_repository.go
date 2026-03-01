@@ -82,6 +82,24 @@ func (r *pgHotelRepository) List(ctx context.Context, filter domain.HotelFilter)
 	return hotels, total, nil
 }
 
+func (r *pgHotelRepository) GetByName(ctx context.Context, name string) ([]*domain.Hotel, error) {
+	var hotels []*domain.Hotel
+	like := "%" + name + "%"
+	if err := r.db.WithContext(ctx).
+		Preload("Region").
+		Preload("Province").
+		Preload("District").
+		Preload("Subdistrict").
+		Preload("AccommodationType").
+		Preload("PriceRange").
+		Where("name_th ILIKE ? OR name_en ILIKE ?", like, like).
+		Limit(10).
+		Find(&hotels).Error; err != nil {
+		return nil, err
+	}
+	return hotels, nil
+}
+
 func (r *pgHotelRepository) GetAccommodationTypes(ctx context.Context) ([]*domain.AccommodationType, error) {
 	var types []*domain.AccommodationType
 	if err := r.db.WithContext(ctx).Find(&types).Error; err != nil {

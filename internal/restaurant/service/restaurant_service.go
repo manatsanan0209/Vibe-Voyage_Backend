@@ -18,6 +18,10 @@ func (s *restaurantService) GetRestaurantByID(ctx context.Context, id string) (*
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *restaurantService) GetRestaurantByName(ctx context.Context, name string) ([]*domain.Restaurant, error) {
+	return s.repo.GetByName(ctx, name)
+}
+
 func (s *restaurantService) ListRestaurants(ctx context.Context, filter domain.RestaurantFilter) ([]*domain.Restaurant, int64, error) {
 	return s.repo.List(ctx, filter)
 }
