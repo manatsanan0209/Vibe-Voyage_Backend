@@ -31,7 +31,8 @@ func Connect() (*gorm.DB, error) {
 	)
 
 	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{
-		Logger: newLogger,
+		Logger:                                   newLogger,
+		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {
 		return nil, err
