@@ -18,6 +18,10 @@ func (s *hotelService) GetHotelByID(ctx context.Context, id string) (*domain.Hot
 	return s.repo.GetByID(ctx, id)
 }
 
+func (s *hotelService) GetHotelByName(ctx context.Context, name string) ([]*domain.Hotel, error) {
+	return s.repo.GetByName(ctx, name)
+}
+
 func (s *hotelService) ListHotels(ctx context.Context, filter domain.HotelFilter) ([]*domain.Hotel, int64, error) {
 	return s.repo.List(ctx, filter)
 }

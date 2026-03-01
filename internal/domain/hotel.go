@@ -89,6 +89,7 @@ type HotelFilter struct {
 
 type HotelRepository interface {
 	GetByID(ctx context.Context, id string) (*Hotel, error)
+	GetByName(ctx context.Context, name string) ([]*Hotel, error)
 	List(ctx context.Context, filter HotelFilter) ([]*Hotel, int64, error)
 	GetAccommodationTypes(ctx context.Context) ([]*AccommodationType, error)
 	GetPriceRanges(ctx context.Context) ([]*PriceRange, error)
@@ -100,6 +101,7 @@ type HotelRepository interface {
 
 type HotelService interface {
 	GetHotelByID(ctx context.Context, id string) (*Hotel, error)
+	GetHotelByName(ctx context.Context, name string) ([]*Hotel, error)
 	ListHotels(ctx context.Context, filter HotelFilter) ([]*Hotel, int64, error)
 	GetAccommodationTypes(ctx context.Context) ([]*AccommodationType, error)
 	GetPriceRanges(ctx context.Context) ([]*PriceRange, error)

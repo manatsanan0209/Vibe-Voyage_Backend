@@ -68,6 +68,7 @@ type RestaurantFilter struct {
 
 type RestaurantRepository interface {
 	GetByID(ctx context.Context, id string) (*Restaurant, error)
+	GetByName(ctx context.Context, name string) ([]*Restaurant, error)
 	List(ctx context.Context, filter RestaurantFilter) ([]*Restaurant, int64, error)
 	GetFoodTypes(ctx context.Context) ([]*FoodType, error)
 }
@@ -78,6 +79,7 @@ type RestaurantRepository interface {
 
 type RestaurantService interface {
 	GetRestaurantByID(ctx context.Context, id string) (*Restaurant, error)
+	GetRestaurantByName(ctx context.Context, name string) ([]*Restaurant, error)
 	ListRestaurants(ctx context.Context, filter RestaurantFilter) ([]*Restaurant, int64, error)
 	GetFoodTypes(ctx context.Context) ([]*FoodType, error)
 }

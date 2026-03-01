@@ -72,6 +72,22 @@ func (r *pgRestaurantRepository) List(ctx context.Context, filter domain.Restaur
 	return restaurants, total, nil
 }
 
+func (r *pgRestaurantRepository) GetByName(ctx context.Context, name string) ([]*domain.Restaurant, error) {
+	var restaurants []*domain.Restaurant
+	like := "%" + name + "%"
+	if err := r.db.WithContext(ctx).
+		Preload("Region").
+		Preload("Province").
+		Preload("District").
+		Preload("Subdistrict").
+		Where("name_th ILIKE ? OR name_en ILIKE ?", like, like).
+		Limit(10).
+		Find(&restaurants).Error; err != nil {
+		return nil, err
+	}
+	return restaurants, nil
+}
+
 func (r *pgRestaurantRepository) GetFoodTypes(ctx context.Context) ([]*domain.FoodType, error) {
 	var foodTypes []*domain.FoodType
 	if err := r.db.WithContext(ctx).Find(&foodTypes).Error; err != nil {
