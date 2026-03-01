@@ -19,6 +19,7 @@ import (
 	hotelPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/hotel"
 	placePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place"
 	restaurantPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant"
+	tripPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip"
 	userPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user"
 )
 
@@ -30,7 +31,13 @@ func Run() error {
 		return err
 	}
 
-	err = gormDB.AutoMigrate(&domain.User{})
+	err = gormDB.AutoMigrate(
+		&domain.User{},
+		&domain.Room{},
+		&domain.Trips{},
+		&domain.RoomMember{},
+		&domain.UserLifestyle{},
+	)
 	if err != nil {
 		log.Fatal("Migration failed:", err)
 	}
@@ -58,6 +65,7 @@ func Run() error {
 	attractionPkg.Setup(app, gormDB)
 	hotelPkg.Setup(app, gormDB)
 	restaurantPkg.Setup(app, gormDB)
+	tripPkg.Setup(app, gormDB)
 
 	return app.Listen(":8080")
 }
