@@ -22,6 +22,11 @@ func NewTripService(db *gorm.DB, lifestyleSvc domain.UserLifestyleService) domai
 }
 
 func (s *tripService) GetTripSchedule(ctx context.Context, tripID uint) (*domain.GetTripScheduleResult, error) {
+	var trip domain.Trips
+	if err := s.db.WithContext(ctx).First(&trip, tripID).Error; err != nil {
+		return nil, err
+	}
+
 	var schedules []domain.TripSchedule
 	if err := s.db.WithContext(ctx).
 		Where("trip_id = ?", tripID).
@@ -50,6 +55,7 @@ func (s *tripService) GetTripSchedule(ctx context.Context, tripID uint) (*domain
 	}
 
 	return &domain.GetTripScheduleResult{
+		Trip:        &trip,
 		Suggestions: suggestions,
 		Days:        days,
 	}, nil

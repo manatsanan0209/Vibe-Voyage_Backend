@@ -38,8 +38,12 @@ type DayScheduleDTO struct {
 }
 
 type GetTripScheduleResponseDTO struct {
-	Suggestions []TripScheduleItemDTO `json:"suggestions"`
-	Days        []DayScheduleDTO      `json:"days"`
+	TripID          uint                  `json:"trip_id"`
+	DestinationName string                `json:"destination_name"`
+	StartDate       string                `json:"start_date"`
+	EndDate         string                `json:"end_date"`
+	Suggestions     []TripScheduleItemDTO `json:"suggestions"`
+	Days            []DayScheduleDTO      `json:"days"`
 }
 
 type CreateTripScheduleItemRequestDTO struct {
