@@ -46,6 +46,31 @@ type CreateTripResult struct {
 	Lifestyle *UserLifestyle
 }
 
+type DaySchedule struct {
+	DayNumber int
+	Items     []TripSchedule
+}
+
+type GetTripScheduleResult struct {
+	Suggestions []TripSchedule
+	Days        []DaySchedule
+}
+
+type CreateTripScheduleInput struct {
+	TripID        uint
+	DayNumber     int
+	SequenceOrder int
+	PlaceName     string
+	PlaceID       string
+	Latitude      float64
+	Longitude     float64
+	StartTime     string
+	EndTime       string
+	Type          string
+}
+
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
+	GetTripSchedule(ctx context.Context, tripID uint) (*GetTripScheduleResult, error)
+	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 }

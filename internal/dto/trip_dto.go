@@ -18,6 +18,45 @@ type CreateTripRequestDTO struct {
 	AdditionalNotes       string                    `json:"additional_notes"`
 }
 
+type TripScheduleItemDTO struct {
+	TripScheduleID uint    `json:"trip_schedule_id"`
+	DayNumber      int     `json:"day_number"`
+	SequenceOrder  int     `json:"sequence_order"`
+	PlaceName      string  `json:"place_name"`
+	PlaceID        string  `json:"place_id"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	StartTime      string  `json:"start_time"`
+	EndTime        string  `json:"end_time"`
+	Type           string  `json:"type"`
+}
+
+type DayScheduleDTO struct {
+	DayNumber int                   `json:"day_number"`
+	Items     []TripScheduleItemDTO `json:"items"`
+}
+
+type GetTripScheduleResponseDTO struct {
+	Suggestions []TripScheduleItemDTO `json:"suggestions"`
+	Days        []DayScheduleDTO      `json:"days"`
+}
+
+type CreateTripScheduleItemRequestDTO struct {
+	DayNumber     int     `json:"day_number"`
+	SequenceOrder int     `json:"sequence_order"`
+	PlaceName     string  `json:"place_name"`
+	PlaceID       string  `json:"place_id"`
+	Latitude      float64 `json:"latitude"`
+	Longitude     float64 `json:"longitude"`
+	StartTime     string  `json:"start_time"`
+	EndTime       string  `json:"end_time"`
+	Type          string  `json:"type"`
+}
+
+type CreateTripScheduleRequestDTO struct {
+	Items []CreateTripScheduleItemRequestDTO `json:"items"`
+}
+
 type CreateTripResponseDTO struct {
 	RoomID          uint   `json:"room_id"`
 	TripID          uint   `json:"trip_id"`
