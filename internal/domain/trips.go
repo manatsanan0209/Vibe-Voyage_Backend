@@ -34,6 +34,7 @@ type CreateTripInput struct {
 	StartDate             time.Time
 	EndDate               time.Time
 	PreferredDestinations []PreferredDestination
+	TravelVibes           []string
 	VoyagePriorities      []string
 	FoodVibes             []string
 	AdditionalNotes       string

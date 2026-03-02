@@ -14,6 +14,7 @@ type UserLifestyle struct {
 	RoomID                uint           `json:"room_id" gorm:"not null;index"`
 	Room                  Room           `json:"-" gorm:"foreignKey:RoomID;references:RoomID"`
 	PreferredDestinations string         `json:"preferred_destinations" gorm:"type:json"`
+	TravelVibes           string         `json:"travel_vibes" gorm:"type:json;not null"`
 	VoyagePriorities      string         `json:"voyage_priorities" gorm:"type:json;not null"`
 	FoodVibes             string         `json:"food_vibes" gorm:"type:json;not null"`
 	AdditionalNotes       string         `json:"additional_notes"`
