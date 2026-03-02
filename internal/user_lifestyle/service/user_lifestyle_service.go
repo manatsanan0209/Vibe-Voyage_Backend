@@ -53,12 +53,12 @@ func (s *userLifestyleService) AnalyzeLifestyle(ctx context.Context, lifestyleID
 	}
 
 	var travelVibes []string
-	if err := json.Unmarshal([]byte(lifestyle.TravelVibes), &travelVibes); err != nil {
+	if err := json.Unmarshal([]byte(lifestyle.TravelVibes), &travelVibes); err != nil || travelVibes == nil {
 		travelVibes = []string{}
 	}
 
 	var voyagePriorities []string
-	if err := json.Unmarshal([]byte(lifestyle.VoyagePriorities), &voyagePriorities); err != nil {
+	if err := json.Unmarshal([]byte(lifestyle.VoyagePriorities), &voyagePriorities); err != nil || voyagePriorities == nil {
 		voyagePriorities = []string{}
 	}
 
@@ -69,7 +69,7 @@ func (s *userLifestyleService) AnalyzeLifestyle(ctx context.Context, lifestyleID
 		"lifestyle_types":  travelVibes,
 	}
 
-	log.Printf("destination: %s", trip.DestinationName);
+	log.Printf("destination: %s", trip.DestinationName)
 
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -110,8 +110,8 @@ func (s *userLifestyleService) AnalyzeLifestyle(ctx context.Context, lifestyleID
 	}
 
 	structuredJSON := string(body)
-	lifestyle.StructuredLifestyle = &structuredJSON
-	if err := s.repo.Update(ctx, lifestyle); err != nil {
+	if err := s.db.WithContext(ctx).Model(lifestyle).
+		Update("structured_lifestyle", structuredJSON).Error; err != nil {
 		return nil, fmt.Errorf("failed to update structured_lifestyle: %w", err)
 	}
 

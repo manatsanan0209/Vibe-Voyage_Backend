@@ -41,10 +41,11 @@ type CreateTripInput struct {
 }
 
 type CreateTripResult struct {
-	Room      *Room
-	Trip      *Trips
-	Member    *RoomMember
-	Lifestyle *UserLifestyle
+	Room        *Room
+	Trip        *Trips
+	Member      *RoomMember
+	Lifestyle   *UserLifestyle
+	Suggestions []TripSchedule
 }
 
 type DaySchedule struct {
