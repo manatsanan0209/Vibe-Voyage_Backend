@@ -21,6 +21,7 @@ import (
 	restaurantPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant"
 	tripPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip"
 	userPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user"
+	userLifestylePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user_lifestyle"
 )
 
 func Run() error {
@@ -67,6 +68,7 @@ func Run() error {
 	hotelPkg.Setup(app, gormDB)
 	restaurantPkg.Setup(app, gormDB)
 	tripPkg.Setup(app, gormDB)
+	userLifestylePkg.Setup(app, gormDB)
 
 	return app.Listen(":8080")
 }

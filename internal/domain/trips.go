@@ -70,6 +70,13 @@ type CreateTripScheduleInput struct {
 	Type          string
 }
 
+type RecommendedPlace struct {
+	Name      string  `json:"name"`
+	Category  string  `json:"category"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
+
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
 	GetTripSchedule(ctx context.Context, tripID uint) (*GetTripScheduleResult, error)
