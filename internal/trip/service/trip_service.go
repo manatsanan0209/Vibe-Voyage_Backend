@@ -73,6 +73,10 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 	if err != nil {
 		return nil, errors.New("failed to marshal preferred_destinations")
 	}
+	travelVibesJSON, err := json.Marshal(input.TravelVibes)
+	if err != nil {
+		return nil, errors.New("failed to marshal travel_vibes")
+	}
 	prioritiesJSON, err := json.Marshal(input.VoyagePriorities)
 	if err != nil {
 		return nil, errors.New("failed to marshal voyage_priorities")
@@ -116,6 +120,7 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 			UserID:                userID,
 			RoomID:                room.RoomID,
 			PreferredDestinations: string(preferredDestJSON),
+			TravelVibes:           string(travelVibesJSON),
 			VoyagePriorities:      string(prioritiesJSON),
 			FoodVibes:             string(foodVibesJSON),
 			AdditionalNotes:       input.AdditionalNotes,

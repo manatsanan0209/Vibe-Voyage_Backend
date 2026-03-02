@@ -173,6 +173,7 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 		StartDate:             startDate,
 		EndDate:               endDate,
 		PreferredDestinations: preferredDests,
+		TravelVibes:           req.TravelVibes,
 		VoyagePriorities:      req.VoyagePriorities,
 		FoodVibes:             req.FoodVibes,
 		AdditionalNotes:       req.AdditionalNotes,

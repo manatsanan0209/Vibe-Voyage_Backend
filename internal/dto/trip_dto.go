@@ -13,6 +13,7 @@ type CreateTripRequestDTO struct {
 	StartDate             string                    `json:"start_date"`
 	EndDate               string                    `json:"end_date"`
 	PreferredDestinations []PreferredDestinationDTO `json:"preferred_destinations"`
+	TravelVibes           []string                  `json:"travel_vibes"`
 	VoyagePriorities      []string                  `json:"voyage_priorities"`
 	FoodVibes             []string                  `json:"food_vibes"`
 	AdditionalNotes       string                    `json:"additional_notes"`
