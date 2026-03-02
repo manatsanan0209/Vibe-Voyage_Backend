@@ -41,10 +41,11 @@ type CreateTripInput struct {
 }
 
 type CreateTripResult struct {
-	Room      *Room
-	Trip      *Trips
-	Member    *RoomMember
-	Lifestyle *UserLifestyle
+	Room        *Room
+	Trip        *Trips
+	Member      *RoomMember
+	Lifestyle   *UserLifestyle
+	Suggestions []TripSchedule
 }
 
 type DaySchedule struct {
@@ -68,6 +69,13 @@ type CreateTripScheduleInput struct {
 	StartTime     string
 	EndTime       string
 	Type          string
+}
+
+type RecommendedPlace struct {
+	Name      string  `json:"name"`
+	Category  string  `json:"category"`
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
 }
 
 type TripService interface {

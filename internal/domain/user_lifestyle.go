@@ -15,8 +15,8 @@ type UserLifestyle struct {
 	Room                  Room           `json:"-" gorm:"foreignKey:RoomID;references:RoomID"`
 	PreferredDestinations string         `json:"preferred_destinations" gorm:"type:json"`
 	TravelVibes           string         `json:"travel_vibes" gorm:"type:json"`
-	VoyagePriorities      string         `json:"voyage_priorities" gorm:"type:json;not null"`
-	FoodVibes             string         `json:"food_vibes" gorm:"type:json;not null"`
+	VoyagePriorities      string         `json:"voyage_priorities" gorm:"type:json"`
+	FoodVibes             string         `json:"food_vibes" gorm:"type:json"`
 	AdditionalNotes       string         `json:"additional_notes"`
 	StructuredLifestyle   *string        `json:"structured_lifestyle" gorm:"type:json"`
 	CreatedAt             time.Time      `json:"created_at"`
@@ -26,12 +26,13 @@ type UserLifestyle struct {
 
 type UserLifestyleRepository interface {
 	Create(ctx context.Context, lifestyle *UserLifestyle) error
+	GetByID(ctx context.Context, lifestyleID uint) (*UserLifestyle, error)
 	GetByUserAndRoom(ctx context.Context, userID, roomID uint) (*UserLifestyle, error)
 	GetByRoomID(ctx context.Context, roomID uint) ([]UserLifestyle, error)
 	Update(ctx context.Context, lifestyle *UserLifestyle) error
 }
 
 type UserLifestyleService interface {
-	AnalyzeLifestyle(ctx context.Context, lifestyle *UserLifestyle) error
+	AnalyzeLifestyle(ctx context.Context, lifestyleID uint) ([]RecommendedPlace, error)
 	GetLifestyle(ctx context.Context, userID, roomID uint) (*UserLifestyle, error)
 }

@@ -59,12 +59,13 @@ type CreateTripScheduleRequestDTO struct {
 }
 
 type CreateTripResponseDTO struct {
-	RoomID          uint   `json:"room_id"`
-	TripID          uint   `json:"trip_id"`
-	LifestyleID     uint   `json:"lifestyle_id"`
-	RoomName        string `json:"room_name"`
-	RoomImage       string `json:"room_image"`
-	DestinationName string `json:"destination_name"`
-	StartDate       string `json:"start_date"`
-	EndDate         string `json:"end_date"`
+	RoomID          uint                  `json:"room_id"`
+	TripID          uint                  `json:"trip_id"`
+	LifestyleID     uint                  `json:"lifestyle_id"`
+	RoomName        string                `json:"room_name"`
+	RoomImage       string                `json:"room_image"`
+	DestinationName string                `json:"destination_name"`
+	StartDate       string                `json:"start_date"`
+	EndDate         string                `json:"end_date"`
+	Suggestions     []TripScheduleItemDTO `json:"suggestions"`
 }

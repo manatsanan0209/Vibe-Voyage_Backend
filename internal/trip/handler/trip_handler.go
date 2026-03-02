@@ -199,6 +199,12 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 		EndDate:         result.Trip.EndDate.Format("2006-01-02"),
 	}
 
+	suggestions := make([]dto.TripScheduleItemDTO, 0, len(result.Suggestions))
+	for _, item := range result.Suggestions {
+		suggestions = append(suggestions, toScheduleItemDTO(item))
+	}
+	resp.Suggestions = suggestions
+
 	return c.Status(201).JSON(dto.APIResponse[dto.CreateTripResponseDTO]{
 		Status:  201,
 		Message: "trip created successfully",

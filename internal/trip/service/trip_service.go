@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
@@ -12,11 +13,12 @@ import (
 )
 
 type tripService struct {
-	db *gorm.DB
+	db           *gorm.DB
+	lifestyleSvc domain.UserLifestyleService
 }
 
-func NewTripService(db *gorm.DB) domain.TripService {
-	return &tripService{db: db}
+func NewTripService(db *gorm.DB, lifestyleSvc domain.UserLifestyleService) domain.TripService {
+	return &tripService{db: db, lifestyleSvc: lifestyleSvc}
 }
 
 func (s *tripService) GetTripSchedule(ctx context.Context, tripID uint) (*domain.GetTripScheduleResult, error) {
@@ -68,6 +70,19 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 	}
 
 	var result domain.CreateTripResult
+
+	if input.PreferredDestinations == nil {
+		input.PreferredDestinations = []domain.PreferredDestination{}
+	}
+	if input.TravelVibes == nil {
+		input.TravelVibes = []string{}
+	}
+	if input.VoyagePriorities == nil {
+		input.VoyagePriorities = []string{}
+	}
+	if input.FoodVibes == nil {
+		input.FoodVibes = []string{}
+	}
 
 	preferredDestJSON, err := json.Marshal(input.PreferredDestinations)
 	if err != nil {
@@ -140,6 +155,33 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Analyze lifestyle and save recommendations as suggestions
+	places, err := s.lifestyleSvc.AnalyzeLifestyle(ctx, result.Lifestyle.LifestyleID)
+	if err != nil {
+		log.Printf("[CreateTrip] AnalyzeLifestyle failed (lifestyle_id=%d): %v", result.Lifestyle.LifestyleID, err)
+	} else {
+		suggestions := make([]domain.TripSchedule, 0, len(places))
+		for _, p := range places {
+			suggestions = append(suggestions, domain.TripSchedule{
+				TripID:        result.Trip.TripID,
+				DayNumber:     0,
+				SequenceOrder: 0,
+				PlaceName:     p.Name,
+				PlaceID:       "",
+				Latitude:      p.Latitude,
+				Longitude:     p.Longitude,
+				Type:          p.Category,
+			})
+		}
+		if len(suggestions) > 0 {
+			if err := s.db.WithContext(ctx).Create(&suggestions).Error; err != nil {
+				log.Printf("[CreateTrip] failed to save suggestions: %v", err)
+			} else {
+				result.Suggestions = suggestions
+			}
+		}
 	}
 
 	return &result, nil
