@@ -37,6 +37,7 @@ func Run() error {
 		&domain.Trips{},
 		&domain.RoomMember{},
 		&domain.UserLifestyle{},
+		&domain.TripSchedule{},
 	)
 	if err != nil {
 		log.Fatal("Migration failed:", err)
