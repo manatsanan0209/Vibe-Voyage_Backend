@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
@@ -150,11 +151,31 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 			return err
 		}
 
+		var preferredSchedules []domain.TripSchedule
+		for _, dest := range input.PreferredDestinations {
+			preferredSchedules = append(preferredSchedules, domain.TripSchedule{
+				TripID:        trip.TripID,
+				DayNumber:     0,
+				SequenceOrder: 0,
+				PlaceName:     dest.DestinationName,
+				PlaceID:       dest.DestinationID,
+				Latitude:      dest.Latitude,
+				Longitude:     dest.Longitude,
+				Type:          "preferred_destination",
+			})
+		}
+		if len(preferredSchedules) > 0 {
+			if err := tx.Create(&preferredSchedules).Error; err != nil {
+				return err
+			}
+		}
+
 		result = domain.CreateTripResult{
-			Room:      room,
-			Trip:      trip,
-			Member:    member,
-			Lifestyle: lifestyle,
+			Room:        room,
+			Trip:        trip,
+			Member:      member,
+			Lifestyle:   lifestyle,
+			Suggestions: preferredSchedules,
 		}
 		return nil
 	})
@@ -168,9 +189,9 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 	if err != nil {
 		log.Printf("[CreateTrip] AnalyzeLifestyle failed (lifestyle_id=%d): %v", result.Lifestyle.LifestyleID, err)
 	} else {
-		suggestions := make([]domain.TripSchedule, 0, len(places))
+		aiSuggestions := make([]domain.TripSchedule, 0, len(places))
 		for _, p := range places {
-			suggestions = append(suggestions, domain.TripSchedule{
+			aiSuggestions = append(aiSuggestions, domain.TripSchedule{
 				TripID:        result.Trip.TripID,
 				DayNumber:     0,
 				SequenceOrder: 0,
@@ -181,11 +202,12 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 				Type:          p.Category,
 			})
 		}
-		if len(suggestions) > 0 {
-			if err := s.db.WithContext(ctx).Create(&suggestions).Error; err != nil {
+		if len(aiSuggestions) > 0 {
+			scheduled := schedulePlaces(aiSuggestions, result.Trip.StartDate, result.Trip.EndDate)
+			if err := s.db.WithContext(ctx).Create(&scheduled).Error; err != nil {
 				log.Printf("[CreateTrip] failed to save suggestions: %v", err)
 			} else {
-				result.Suggestions = suggestions
+				result.Suggestions = append(result.Suggestions, scheduled...)
 			}
 		}
 	}
@@ -228,4 +250,87 @@ func (s *tripService) CreateTripSchedule(ctx context.Context, inputs []domain.Cr
 	}
 
 	return schedules, nil
+}
+
+// haversine returns the great-circle distance in km between two lat/lng points.
+func haversine(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371.0
+	dLat := (lat2 - lat1) * math.Pi / 180
+	dLon := (lon2 - lon1) * math.Pi / 180
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1*math.Pi/180)*math.Cos(lat2*math.Pi/180)*
+			math.Sin(dLon/2)*math.Sin(dLon/2)
+	return R * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+}
+
+// nearestNeighborOrder reorders places so each next place is the closest
+// unvisited one from the current position (greedy nearest-neighbor).
+func nearestNeighborOrder(places []domain.TripSchedule) []domain.TripSchedule {
+	if len(places) == 0 {
+		return places
+	}
+	visited := make([]bool, len(places))
+	result := make([]domain.TripSchedule, 0, len(places))
+	current := 0
+	visited[current] = true
+	result = append(result, places[current])
+
+	for len(result) < len(places) {
+		minDist := math.MaxFloat64
+		nearest := -1
+		for j := range places {
+			if visited[j] {
+				continue
+			}
+			d := haversine(
+				places[current].Latitude, places[current].Longitude,
+				places[j].Latitude, places[j].Longitude,
+			)
+			if d < minDist {
+				minDist = d
+				nearest = j
+			}
+		}
+		if nearest == -1 {
+			break
+		}
+		visited[nearest] = true
+		result = append(result, places[nearest])
+		current = nearest
+	}
+	return result
+}
+
+// schedulePlaces assigns DayNumber and SequenceOrder to places by:
+// 1. Ordering them with nearest-neighbor (geographically close places together)
+// 2. Distributing evenly across the trip days
+func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) []domain.TripSchedule {
+	if len(places) == 0 {
+		return places
+	}
+
+	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
+	if totalDays < 1 {
+		totalDays = 1
+	}
+
+	ordered := nearestNeighborOrder(places)
+
+	// ceiling division: spread extras into earlier days
+	placesPerDay := (len(ordered) + totalDays - 1) / totalDays
+	if placesPerDay < 1 {
+		placesPerDay = 1
+	}
+
+	for i := range ordered {
+		day := i/placesPerDay + 1
+		if day > totalDays {
+			day = totalDays
+		}
+		seq := i%placesPerDay + 1
+		ordered[i].DayNumber = day
+		ordered[i].SequenceOrder = seq
+	}
+
+	return ordered
 }

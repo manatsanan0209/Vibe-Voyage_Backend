@@ -1,8 +1,10 @@
 package dto
 
 type PreferredDestinationDTO struct {
-	DestinationName string `json:"destination_name"`
-	DestinationID   string `json:"destination_id"`
+	DestinationName string  `json:"destination_name"`
+	DestinationID   string  `json:"destination_id"`
+	Latitude        float64 `json:"latitude"`
+	Longitude       float64 `json:"longitude"`
 }
 
 type CreateTripRequestDTO struct {
