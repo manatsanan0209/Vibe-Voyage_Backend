@@ -98,8 +98,12 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 	}
 
 	resp := dto.GetTripScheduleResponseDTO{
-		Suggestions: suggestions,
-		Days:        days,
+		TripID:          result.Trip.TripID,
+		DestinationName: result.Trip.DestinationName,
+		StartDate:       result.Trip.StartDate.Format("2006-01-02"),
+		EndDate:         result.Trip.EndDate.Format("2006-01-02"),
+		Suggestions:     suggestions,
+		Days:            days,
 	}
 
 	return c.Status(200).JSON(dto.APIResponse[dto.GetTripScheduleResponseDTO]{

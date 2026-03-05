@@ -56,6 +56,7 @@ type DaySchedule struct {
 }
 
 type GetTripScheduleResult struct {
+	Trip        *Trips
 	Suggestions []TripSchedule
 	Days        []DaySchedule
 }
