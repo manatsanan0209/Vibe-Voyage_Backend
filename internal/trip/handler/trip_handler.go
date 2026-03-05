@@ -162,6 +162,8 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 		preferredDests[i] = domain.PreferredDestination{
 			DestinationName: d.DestinationName,
 			DestinationID:   d.DestinationID,
+			Latitude:        d.Latitude,
+			Longitude:       d.Longitude,
 		}
 	}
 
