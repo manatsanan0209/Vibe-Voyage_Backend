@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"context"
 	"time"
 
 	"gorm.io/gorm"
@@ -21,4 +22,15 @@ type RoomMember struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+}
+
+type RoomMemberRepository interface {
+	GetByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
+	AddMember(ctx context.Context, member *RoomMember) (*RoomMember, error)
+	ExistsByRoomAndUser(ctx context.Context, roomID, userID uint) (bool, error)
+}
+
+type RoomMemberService interface {
+	GetMembersByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
+	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
 }
