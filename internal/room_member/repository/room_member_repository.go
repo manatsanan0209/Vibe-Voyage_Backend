@@ -17,7 +17,7 @@ func NewRoomMemberRepository(db *gorm.DB) domain.RoomMemberRepository {
 
 func (r *roomMemberRepository) GetByRoomID(ctx context.Context, roomID uint) ([]domain.RoomMember, error) {
 	var members []domain.RoomMember
-	if err := r.db.WithContext(ctx).Where("room_id = ?", roomID).Find(&members).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("User").Where("room_id = ?", roomID).Find(&members).Error; err != nil {
 		return nil, err
 	}
 	return members, nil
@@ -28,6 +28,18 @@ func (r *roomMemberRepository) AddMember(ctx context.Context, member *domain.Roo
 		return nil, err
 	}
 	return member, nil
+}
+
+func (r *roomMemberRepository) GetByID(ctx context.Context, roomMemberID uint) (*domain.RoomMember, error) {
+	var member domain.RoomMember
+	if err := r.db.WithContext(ctx).First(&member, roomMemberID).Error; err != nil {
+		return nil, err
+	}
+	return &member, nil
+}
+
+func (r *roomMemberRepository) DeleteMember(ctx context.Context, roomMemberID uint) error {
+	return r.db.WithContext(ctx).Delete(&domain.RoomMember{}, roomMemberID).Error
 }
 
 func (r *roomMemberRepository) ExistsByRoomAndUser(ctx context.Context, roomID, userID uint) (bool, error) {

@@ -26,11 +26,14 @@ type RoomMember struct {
 
 type RoomMemberRepository interface {
 	GetByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
+	GetByID(ctx context.Context, roomMemberID uint) (*RoomMember, error)
 	AddMember(ctx context.Context, member *RoomMember) (*RoomMember, error)
+	DeleteMember(ctx context.Context, roomMemberID uint) error
 	ExistsByRoomAndUser(ctx context.Context, roomID, userID uint) (bool, error)
 }
 
 type RoomMemberService interface {
 	GetMembersByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
 	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
+	DeleteMember(ctx context.Context, roomID, requesterUserID, roomMemberID uint) error
 }

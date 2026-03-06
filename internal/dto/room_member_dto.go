@@ -1,9 +1,10 @@
 package dto
 
-type RoomMemberDTO struct {
+type RoomMemberResponseDTO struct {
 	RoomMemberID uint   `json:"room_member_id"`
 	RoomID       uint   `json:"room_id"`
 	UserID       uint   `json:"user_id"`
+	Username     string `json:"username"`
 	Role         int    `json:"role"`
 	RoleName     string `json:"role_name"`
 	CreatedAt    string `json:"created_at"`
