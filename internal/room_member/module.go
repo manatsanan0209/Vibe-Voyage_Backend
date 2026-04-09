@@ -10,6 +10,7 @@ import (
 
 func Setup(app *fiber.App, db *gorm.DB) {
 	repo := repository.NewRoomMemberRepository(db)
-	svc := service.NewRoomMemberService(repo)
+	inviteRepo := repository.NewRoomInviteCodeRepository(db)
+	svc := service.NewRoomMemberService(repo, inviteRepo)
 	handler.NewRoomMemberHandler(svc).RegisterRoutes(app)
 }

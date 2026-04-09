@@ -9,9 +9,14 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/db"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
+	tripRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip/repository"
+	tripService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip/service"
 
 	userRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user/repository"
 	userService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user/service"
+	userLifestyleClient "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user_lifestyle/client"
+	userLifestyleRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user_lifestyle/repository"
+	userLifestyleService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user_lifestyle/service"
 
 	attractionPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction"
 	authPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth"
@@ -38,6 +43,7 @@ func Run() error {
 		&domain.Room{},
 		&domain.Trips{},
 		&domain.RoomMember{},
+		&domain.RoomInviteCode{},
 		&domain.UserLifestyle{},
 		&domain.TripSchedule{},
 	)
@@ -59,6 +65,11 @@ func Run() error {
 
 	repo := userRepo.NewUserRepository(gormDB)
 	svc := userService.NewUserService(repo)
+	tripRepository := tripRepo.NewTripRepository(gormDB)
+	lifestyleRepository := userLifestyleRepo.NewUserLifestyleRepository(gormDB)
+	recommendationClient := userLifestyleClient.NewHTTPRecommendationClient()
+	lifestyleSvc := userLifestyleService.NewUserLifestyleService(lifestyleRepository, recommendationClient)
+	tripSvc := tripService.NewTripService(tripRepository, lifestyleSvc)
 
 	healthPkg.RegisterRoutes(app)
 	userPkg.Setup(app, svc)
@@ -68,8 +79,8 @@ func Run() error {
 	attractionPkg.Setup(app, gormDB)
 	hotelPkg.Setup(app, gormDB)
 	restaurantPkg.Setup(app, gormDB)
-	tripPkg.Setup(app, gormDB)
-	userLifestylePkg.Setup(app, gormDB)
+	tripPkg.Setup(app, tripSvc)
+	userLifestylePkg.Setup(app, lifestyleSvc)
 	roomMemberPkg.Setup(app, gormDB)
 
 	return app.Listen(":8080")

@@ -24,8 +24,20 @@ type RoomMember struct {
 	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
+type UserRoomSummary struct {
+	RoomID        uint
+	RoomName      string
+	RoomImage     string
+	OwnerID       uint
+	OwnerUsername string
+	Role          int
+	JoinedAt      time.Time
+	MembersCount  int64
+}
+
 type RoomMemberRepository interface {
 	GetByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
+	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
 	GetByID(ctx context.Context, roomMemberID uint) (*RoomMember, error)
 	AddMember(ctx context.Context, member *RoomMember) (*RoomMember, error)
 	DeleteMember(ctx context.Context, roomMemberID uint) error
@@ -34,6 +46,10 @@ type RoomMemberRepository interface {
 
 type RoomMemberService interface {
 	GetMembersByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
+	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
 	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
 	DeleteMember(ctx context.Context, roomID, requesterUserID, roomMemberID uint) error
+	CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access string, expireTime time.Time) (*RoomInviteCode, error)
+	JoinByInviteCode(ctx context.Context, userID uint, inviteCode string) (*RoomMember, error)
+	ListInviteCodes(ctx context.Context, roomID, requesterUserID uint) ([]RoomInviteCode, error)
 }

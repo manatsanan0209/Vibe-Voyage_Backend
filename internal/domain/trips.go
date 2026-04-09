@@ -81,6 +81,22 @@ type RecommendedPlace struct {
 	Longitude float64 `json:"longitude"`
 }
 
+type TripRepository interface {
+	GetByID(ctx context.Context, tripID uint) (*Trips, error)
+	GetByRoomID(ctx context.Context, roomID uint) (*Trips, error)
+	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
+	CreateTripBundle(
+		ctx context.Context,
+		userID uint,
+		input CreateTripInput,
+		preferredDestinationsJSON string,
+		travelVibesJSON string,
+		voyagePrioritiesJSON string,
+		foodVibesJSON string,
+	) (*CreateTripResult, error)
+	CreateSchedules(ctx context.Context, schedules []TripSchedule) error
+}
+
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
 	GetTripSchedule(ctx context.Context, tripID uint) (*GetTripScheduleResult, error)

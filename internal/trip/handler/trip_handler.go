@@ -1,13 +1,11 @@
 package handler
 
 import (
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/token"
+	authMiddleware "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/middleware"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/dto"
 )
@@ -22,6 +20,7 @@ func NewTripHandler(svc domain.TripService) *tripHandler {
 
 func (h *tripHandler) RegisterRoutes(app *fiber.App) {
 	api := app.Group("/api/trip")
+	api.Use(authMiddleware.Authorize())
 	api.Post("/", h.CreateTrip)
 	api.Get("/:tripID/schedule", h.GetTripSchedule)
 	api.Post("/:tripID/schedule", h.CreateTripSchedule)
@@ -43,25 +42,6 @@ func toScheduleItemDTO(item domain.TripSchedule) dto.TripScheduleItemDTO {
 }
 
 func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	if _, err := token.Validate(tokenStr, secret); err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
-		})
-	}
-
 	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
@@ -114,23 +94,12 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 }
 
 func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	claims, err := token.Validate(tokenStr, secret)
-	if err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
+			Error:   "invalid token claims",
 		})
 	}
 
@@ -185,7 +154,7 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 		AdditionalNotes:       req.AdditionalNotes,
 	}
 
-	result, err := h.svc.CreateTrip(c.Context(), claims.UserID, input)
+	result, err := h.svc.CreateTrip(c.Context(), userID, input)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
 			Status:  400,
@@ -219,25 +188,6 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 }
 
 func (h *tripHandler) CreateTripSchedule(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	if _, err := token.Validate(tokenStr, secret); err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
-		})
-	}
-
 	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{

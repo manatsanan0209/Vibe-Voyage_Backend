@@ -52,6 +52,23 @@ func (r *userLifestyleRepository) GetByRoomID(ctx context.Context, roomID uint) 
 	return lifestyles, nil
 }
 
+func (r *userLifestyleRepository) GetTripByRoomID(ctx context.Context, roomID uint) (*domain.Trips, error) {
+	var trip domain.Trips
+	if err := r.db.WithContext(ctx).
+		Where("room_id = ?", roomID).
+		First(&trip).Error; err != nil {
+		return nil, err
+	}
+	return &trip, nil
+}
+
+func (r *userLifestyleRepository) UpdateStructuredLifestyle(ctx context.Context, lifestyleID uint, structuredLifestyle string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.UserLifestyle{}).
+		Where("lifestyle_id = ?", lifestyleID).
+		Update("structured_lifestyle", structuredLifestyle).Error
+}
+
 func (r *userLifestyleRepository) Update(ctx context.Context, lifestyle *domain.UserLifestyle) error {
 	return r.db.WithContext(ctx).Save(lifestyle).Error
 }
