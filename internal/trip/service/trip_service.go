@@ -237,11 +237,13 @@ func nearestNeighborOrder(places []domain.TripSchedule) []domain.TripSchedule {
 
 // schedulePlaces assigns DayNumber and SequenceOrder to places by:
 // 1. Ordering them with nearest-neighbor (geographically close places together)
-// 2. Distributing evenly across the trip days
+// 2. Distributing evenly across the trip days (max 4 places per day)
 func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) []domain.TripSchedule {
 	if len(places) == 0 {
 		return places
 	}
+
+	const maxPlacesPerDay = 4
 
 	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
 	if totalDays < 1 {
@@ -250,10 +252,19 @@ func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) 
 
 	ordered := nearestNeighborOrder(places)
 
+	// Truncate to at most 4 places per day
+	maxPlaces := totalDays * maxPlacesPerDay
+	if len(ordered) > maxPlaces {
+		ordered = ordered[:maxPlaces]
+	}
+
 	// ceiling division: spread extras into earlier days
 	placesPerDay := (len(ordered) + totalDays - 1) / totalDays
 	if placesPerDay < 1 {
 		placesPerDay = 1
+	}
+	if placesPerDay > maxPlacesPerDay {
+		placesPerDay = maxPlacesPerDay
 	}
 
 	for i := range ordered {
