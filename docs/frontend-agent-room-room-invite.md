@@ -42,7 +42,7 @@
 - error จะมีข้อความเมื่อ request ล้มเหลว
 
 ### 3.2 Auth
-ทุก endpoint ในกลุ่ม room member / invite code ต้องส่ง header:
+ทุก endpoint ในกลุ่ม room / invite code ต้องส่ง header:
 
 ```http
 Authorization: Bearer <token>

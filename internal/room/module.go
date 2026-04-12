@@ -1,10 +1,10 @@
-package roommember
+package room
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room_member/handler"
-	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room_member/repository"
-	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room_member/service"
+	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/handler"
+	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/repository"
+	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/service"
 	"gorm.io/gorm"
 )
 

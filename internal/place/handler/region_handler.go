@@ -29,10 +29,11 @@ func (h *regionHandler) GetAll(c *fiber.Ctx) error {
 			Error:   err.Error(),
 		})
 	}
-	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]*domain.Region]{
+	result := dto.NewRegionResponseDTOList(regions)
+	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]dto.RegionResponseDTO]{
 		Status:  fiber.StatusOK,
 		Message: "success",
-		Data:    &regions,
+		Data:    &result,
 	})
 }
 
@@ -53,9 +54,10 @@ func (h *regionHandler) GetByID(c *fiber.Ctx) error {
 			Error:   "not found",
 		})
 	}
-	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[domain.Region]{
+	result := dto.NewRegionResponseDTO(region)
+	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[dto.RegionResponseDTO]{
 		Status:  fiber.StatusOK,
 		Message: "success",
-		Data:    region,
+		Data:    result,
 	})
 }
