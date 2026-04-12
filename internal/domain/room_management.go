@@ -35,7 +35,7 @@ type UserRoomSummary struct {
 	MembersCount  int64
 }
 
-type RoomMemberRepository interface {
+type RoomRepository interface {
 	GetByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
 	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
 	GetByID(ctx context.Context, roomMemberID uint) (*RoomMember, error)
@@ -44,7 +44,7 @@ type RoomMemberRepository interface {
 	ExistsByRoomAndUser(ctx context.Context, roomID, userID uint) (bool, error)
 }
 
-type RoomMemberService interface {
+type RoomService interface {
 	GetMembersByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
 	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
 	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
