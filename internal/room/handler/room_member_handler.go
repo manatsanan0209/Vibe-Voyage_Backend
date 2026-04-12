@@ -36,7 +36,7 @@ func (h *roomHandler) GetMembers(c *fiber.Ctx) error {
 			UserID:       m.UserID,
 			Username:     m.User.Username,
 			Role:         m.Role,
-			RoleName:     roleName(m.Role),
+			RoleName:     domain.RoomRoleName(m.Role),
 			CreatedAt:    m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
@@ -123,7 +123,7 @@ func (h *roomHandler) AddMember(c *fiber.Ctx) error {
 		UserID:       member.UserID,
 		Username:     member.User.Username,
 		Role:         member.Role,
-		RoleName:     roleName(member.Role),
+		RoleName:     domain.RoomRoleName(member.Role),
 		CreatedAt:    member.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 

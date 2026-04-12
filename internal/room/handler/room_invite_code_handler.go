@@ -12,31 +12,42 @@ import (
 )
 
 func inviteToDTO(invite domain.RoomInviteCode) dto.RoomInviteCodeResponseDTO {
+	var expireTime *string
+	if invite.ExpireTime != nil {
+		formatted := invite.ExpireTime.Format(time.RFC3339)
+		expireTime = &formatted
+	}
+
 	return dto.RoomInviteCodeResponseDTO{
 		RoomInviteID:        invite.RoomInviteID,
 		RoomID:              invite.RoomID,
 		InviteCodeCreatorID: invite.InviteCodeCreatorID,
 		InviteCode:          invite.InviteCode,
 		Access:              invite.Access,
-		ExpireTime:          invite.ExpireTime.Format(time.RFC3339),
+		AccessName:          domain.InviteAccessName(invite.Access),
+		ExpireTime:          expireTime,
 		CreatedAt:           invite.CreatedAt.Format(time.RFC3339),
 	}
 }
 
-func parseExpireTime(value string) (time.Time, error) {
-	trimmed := strings.TrimSpace(value)
+func parseExpireTime(value *string) (*time.Time, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	trimmed := strings.TrimSpace(*value)
 	if trimmed == "" {
-		return time.Time{}, nil
+		return nil, nil
 	}
 
 	if t, err := time.Parse(time.RFC3339, trimmed); err == nil {
-		return t, nil
+		return &t, nil
 	}
 	if t, err := time.Parse("2006-01-02 15:04:05", trimmed); err == nil {
-		return t, nil
+		return &t, nil
 	}
 
-	return time.Time{}, fiber.NewError(fiber.StatusBadRequest, "expire_time must be RFC3339 or YYYY-MM-DD HH:MM:SS")
+	return nil, fiber.NewError(fiber.StatusBadRequest, "expire_time must be null, RFC3339, or YYYY-MM-DD HH:MM:SS")
 }
 
 func (h *roomHandler) CreateInviteCode(c *fiber.Ctx) error {
@@ -167,7 +178,7 @@ func (h *roomHandler) JoinByInviteCode(c *fiber.Ctx) error {
 		UserID:       member.UserID,
 		Username:     member.User.Username,
 		Role:         member.Role,
-		RoleName:     roleName(member.Role),
+		RoleName:     domain.RoomRoleName(member.Role),
 		CreatedAt:    member.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 

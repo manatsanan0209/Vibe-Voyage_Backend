@@ -68,12 +68,13 @@ func (h *roomHandler) GetRoomsByUserID(c *fiber.Ctx) error {
 	for _, room := range rooms {
 		result = append(result, dto.UserRoomSummaryResponseDTO{
 			RoomID:        room.RoomID,
+			TripID:        room.TripID,
 			RoomName:      room.RoomName,
 			RoomImage:     room.RoomImage,
 			OwnerID:       room.OwnerID,
 			OwnerUsername: room.OwnerUsername,
 			Role:          room.Role,
-			RoleName:      roleName(room.Role),
+			RoleName:      domain.RoomRoleName(room.Role),
 			JoinedAt:      room.JoinedAt.Format("2006-01-02T15:04:05Z07:00"),
 			MembersCount:  room.MembersCount,
 		})
@@ -84,15 +85,4 @@ func (h *roomHandler) GetRoomsByUserID(c *fiber.Ctx) error {
 		Message: "success",
 		Data:    &result,
 	})
-}
-
-func roleName(role int) string {
-	switch role {
-	case domain.RoleOwner:
-		return "owner"
-	case domain.RoleMember:
-		return "member"
-	default:
-		return "unknown"
-	}
 }

@@ -12,6 +12,7 @@ type RoomMemberResponseDTO struct {
 
 type UserRoomSummaryResponseDTO struct {
 	RoomID        uint   `json:"room_id"`
+	TripID        uint   `json:"trip_id"`
 	RoomName      string `json:"room_name"`
 	RoomImage     string `json:"room_image"`
 	OwnerID       uint   `json:"owner_id"`
@@ -27,8 +28,8 @@ type AddRoomMemberRequestDTO struct {
 }
 
 type CreateRoomInviteCodeRequestDTO struct {
-	Access     string `json:"access"`
-	ExpireTime string `json:"expire_time"`
+	Access     int     `json:"access"`
+	ExpireTime *string `json:"expire_time"`
 }
 
 type JoinRoomByInviteCodeRequestDTO struct {
@@ -36,11 +37,12 @@ type JoinRoomByInviteCodeRequestDTO struct {
 }
 
 type RoomInviteCodeResponseDTO struct {
-	RoomInviteID        uint   `json:"room_invite_id"`
-	RoomID              uint   `json:"room_id"`
-	InviteCodeCreatorID uint   `json:"invite_code_creator_id"`
-	InviteCode          string `json:"invite_code"`
-	Access              string `json:"access"`
-	ExpireTime          string `json:"expire_time"`
-	CreatedAt           string `json:"created_at"`
+	RoomInviteID        uint    `json:"room_invite_id"`
+	RoomID              uint    `json:"room_id"`
+	InviteCodeCreatorID uint    `json:"invite_code_creator_id"`
+	InviteCode          string  `json:"invite_code"`
+	Access              int     `json:"access"`
+	AccessName          string  `json:"access_name"`
+	ExpireTime          *string `json:"expire_time"`
+	CreatedAt           string  `json:"created_at"`
 }

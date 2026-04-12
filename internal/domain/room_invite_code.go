@@ -8,9 +8,21 @@ import (
 )
 
 const (
-	InviteAccessView = "view"
-	InviteAccessEdit = "edit"
+	InviteAccessEdit = 1
+	InviteAccessView = 2
 )
+
+var InviteAccessMap = map[int]string{
+	InviteAccessEdit: "edit",
+	InviteAccessView: "view",
+}
+
+func InviteAccessName(access int) string {
+	if name, ok := InviteAccessMap[access]; ok {
+		return name
+	}
+	return "unknown"
+}
 
 type RoomInviteCode struct {
 	RoomInviteID        uint           `json:"room_invite_id" gorm:"primaryKey;autoIncrement"`
@@ -19,8 +31,8 @@ type RoomInviteCode struct {
 	InviteCodeCreatorID uint           `json:"invite_code_creator_id" gorm:"not null;index"`
 	InviteCodeCreator   User           `json:"-" gorm:"foreignKey:InviteCodeCreatorID;references:UserID"`
 	InviteCode          string         `json:"invite_code" gorm:"size:32;not null;uniqueIndex"`
-	Access              string         `json:"access" gorm:"type:varchar(16);not null;default:view"`
-	ExpireTime          time.Time      `json:"expire_time" gorm:"not null;index"`
+	Access              int            `json:"access" gorm:"not null;default:2"`
+	ExpireTime          *time.Time     `json:"expire_time" gorm:"index"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
 	DeletedAt           gorm.DeletedAt `json:"deleted_at" gorm:"index"`

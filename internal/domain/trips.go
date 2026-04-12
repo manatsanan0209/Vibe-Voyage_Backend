@@ -9,7 +9,7 @@ import (
 
 type Trips struct {
 	TripID              uint           `json:"trip_id" gorm:"primaryKey;autoIncrement"`
-	RoomID              uint           `json:"room_id" gorm:"not null;index"`
+	RoomID              uint           `json:"room_id" gorm:"not null;uniqueIndex"`
 	Room                Room           `json:"-" gorm:"foreignKey:RoomID;references:RoomID;"`
 	DestinationName     string         `json:"destination_name" gorm:"not null"`
 	DestinationID       string         `json:"destination_id" gorm:"not null"`
@@ -48,6 +48,11 @@ type CreateTripResult struct {
 	Member      *RoomMember
 	Lifestyle   *UserLifestyle
 	Suggestions []TripSchedule
+}
+
+type JoinTripByInviteCodeResult struct {
+	Trip   *Trips
+	Member *RoomMember
 }
 
 type DaySchedule struct {
@@ -100,6 +105,7 @@ type TripRepository interface {
 
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
+	JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*JoinTripByInviteCodeResult, error)
 	GetTripSchedule(ctx context.Context, userID, tripID uint) (*GetTripScheduleResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 }

@@ -8,9 +8,23 @@ import (
 )
 
 const (
-	RoleOwner  = 1
-	RoleMember = 2
+	RoleOwner     = 1
+	RoleMember    = 2
+	RoleSpectator = 3
 )
+
+var RoomRoleMap = map[int]string{
+	RoleOwner:     "room_owner",
+	RoleMember:    "member",
+	RoleSpectator: "spectator",
+}
+
+func RoomRoleName(role int) string {
+	if name, ok := RoomRoleMap[role]; ok {
+		return name
+	}
+	return "unknown"
+}
 
 type RoomMember struct {
 	RoomMemberID uint           `json:"room_member_id" gorm:"primaryKey;autoIncrement"`
@@ -26,6 +40,7 @@ type RoomMember struct {
 
 type UserRoomSummary struct {
 	RoomID        uint
+	TripID        uint
 	RoomName      string
 	RoomImage     string
 	OwnerID       uint
@@ -49,7 +64,7 @@ type RoomService interface {
 	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
 	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
 	DeleteMember(ctx context.Context, roomID, requesterUserID, roomMemberID uint) error
-	CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access string, expireTime time.Time) (*RoomInviteCode, error)
+	CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access int, expireTime *time.Time) (*RoomInviteCode, error)
 	JoinByInviteCode(ctx context.Context, userID uint, inviteCode string) (*RoomMember, error)
 	ListInviteCodes(ctx context.Context, roomID, requesterUserID uint) ([]RoomInviteCode, error)
 }

@@ -15,10 +15,28 @@ import (
 type tripService struct {
 	repo         domain.TripRepository
 	lifestyleSvc domain.UserLifestyleService
+	roomSvc      domain.RoomService
 }
 
-func NewTripService(repo domain.TripRepository, lifestyleSvc domain.UserLifestyleService) domain.TripService {
-	return &tripService{repo: repo, lifestyleSvc: lifestyleSvc}
+func NewTripService(repo domain.TripRepository, lifestyleSvc domain.UserLifestyleService, roomSvc domain.RoomService) domain.TripService {
+	return &tripService{repo: repo, lifestyleSvc: lifestyleSvc, roomSvc: roomSvc}
+}
+
+func (s *tripService) JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*domain.JoinTripByInviteCodeResult, error) {
+	member, err := s.roomSvc.JoinByInviteCode(ctx, userID, inviteCode)
+	if err != nil {
+		return nil, err
+	}
+
+	trip, err := s.repo.GetByRoomID(ctx, member.RoomID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.JoinTripByInviteCodeResult{
+		Trip:   trip,
+		Member: member,
+	}, nil
 }
 
 func (s *tripService) GetTripSchedule(ctx context.Context, userID, tripID uint) (*domain.GetTripScheduleResult, error) {

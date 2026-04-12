@@ -12,23 +12,19 @@ import (
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 )
 
-func (s *roomService) CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access string, expireTime time.Time) (*domain.RoomInviteCode, error) {
+func (s *roomService) CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access int, expireTime *time.Time) (*domain.RoomInviteCode, error) {
 	if err := s.ensureRoomOwner(ctx, roomID, creatorUserID); err != nil {
 		return nil, err
 	}
 
-	normalizedAccess := strings.ToLower(strings.TrimSpace(access))
-	if normalizedAccess == "" {
-		normalizedAccess = domain.InviteAccessView
+	if access == 0 {
+		access = domain.InviteAccessView
 	}
-	if normalizedAccess != domain.InviteAccessView && normalizedAccess != domain.InviteAccessEdit {
-		return nil, errors.New("access must be view or edit")
+	if access != domain.InviteAccessEdit && access != domain.InviteAccessView {
+		return nil, errors.New("access must be 1 (edit) or 2 (view)")
 	}
 
-	if expireTime.IsZero() {
-		expireTime = time.Now().Add(24 * time.Hour)
-	}
-	if !expireTime.After(time.Now()) {
+	if expireTime != nil && !expireTime.After(time.Now()) {
 		return nil, errors.New("expire_time must be in the future")
 	}
 
@@ -41,7 +37,7 @@ func (s *roomService) CreateInviteCode(ctx context.Context, roomID, creatorUserI
 		RoomID:              roomID,
 		InviteCodeCreatorID: creatorUserID,
 		InviteCode:          code,
-		Access:              normalizedAccess,
+		Access:              access,
 		ExpireTime:          expireTime,
 	}
 	if err := s.inviteRepo.Create(ctx, invite); err != nil {
@@ -64,11 +60,16 @@ func (s *roomService) JoinByInviteCode(ctx context.Context, userID uint, inviteC
 	if invite == nil {
 		return nil, errors.New("invite code not found")
 	}
-	if invite.ExpireTime.Before(time.Now()) {
+	if invite.ExpireTime != nil && invite.ExpireTime.Before(time.Now()) {
 		return nil, errors.New("invite code has expired")
 	}
 
-	return s.AddMember(ctx, invite.RoomID, userID)
+	role := domain.RoleMember
+	if invite.Access == domain.InviteAccessView {
+		role = domain.RoleSpectator
+	}
+
+	return s.addMemberWithRole(ctx, invite.RoomID, userID, role)
 }
 
 func (s *roomService) ListInviteCodes(ctx context.Context, roomID, requesterUserID uint) ([]domain.RoomInviteCode, error) {
@@ -84,7 +85,7 @@ func (s *roomService) ListInviteCodes(ctx context.Context, roomID, requesterUser
 	now := time.Now()
 	active := make([]domain.RoomInviteCode, 0, len(invites))
 	for _, inv := range invites {
-		if inv.ExpireTime.After(now) {
+		if inv.ExpireTime == nil || inv.ExpireTime.After(now) {
 			active = append(active, inv)
 		}
 	}

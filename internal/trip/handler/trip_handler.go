@@ -22,6 +22,7 @@ func (h *tripHandler) RegisterRoutes(app *fiber.App) {
 	api := app.Group("/api/trip")
 	api.Use(authMiddleware.Authorize())
 	api.Post("/", h.CreateTrip)
+	api.Post("/join-by-invite-code", h.JoinTripByInviteCode)
 	api.Get("/:tripID/schedule", h.GetTripSchedule)
 	api.Post("/:tripID/schedule", h.CreateTripSchedule)
 }
@@ -199,6 +200,55 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 	return c.Status(201).JSON(dto.APIResponse[dto.CreateTripResponseDTO]{
 		Status:  201,
 		Message: "trip created successfully",
+		Data:    &resp,
+	})
+}
+
+func (h *tripHandler) JoinTripByInviteCode(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	req := new(dto.JoinTripByInviteCodeRequestDTO)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "invalid request body",
+		})
+	}
+
+	result, err := h.svc.JoinTripByInviteCode(c.Context(), userID, req.InviteCode)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to join trip",
+			Error:   err.Error(),
+		})
+	}
+
+	resp := dto.JoinTripByInviteCodeResponseDTO{
+		TripID:          result.Trip.TripID,
+		RoomID:          result.Trip.RoomID,
+		DestinationName: result.Trip.DestinationName,
+		StartDate:       result.Trip.StartDate.Format("2006-01-02"),
+		EndDate:         result.Trip.EndDate.Format("2006-01-02"),
+		RoomMemberID:    result.Member.RoomMemberID,
+		UserID:          result.Member.UserID,
+		Username:        result.Member.User.Username,
+		Role:            result.Member.Role,
+		RoleName:        domain.RoomRoleName(result.Member.Role),
+		JoinedAt:        result.Member.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+
+	return c.Status(201).JSON(dto.APIResponse[dto.JoinTripByInviteCodeResponseDTO]{
+		Status:  201,
+		Message: "joined trip successfully",
 		Data:    &resp,
 	})
 }

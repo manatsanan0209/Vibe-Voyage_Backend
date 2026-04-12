@@ -43,6 +43,10 @@ func (s *roomService) DeleteMember(ctx context.Context, roomID, requesterUserID,
 }
 
 func (s *roomService) AddMember(ctx context.Context, roomID, userID uint) (*domain.RoomMember, error) {
+	return s.addMemberWithRole(ctx, roomID, userID, domain.RoleMember)
+}
+
+func (s *roomService) addMemberWithRole(ctx context.Context, roomID, userID uint, role int) (*domain.RoomMember, error) {
 	exists, err := s.memberRepo.ExistsByRoomAndUser(ctx, roomID, userID)
 	if err != nil {
 		return nil, err
@@ -54,7 +58,7 @@ func (s *roomService) AddMember(ctx context.Context, roomID, userID uint) (*doma
 	member := &domain.RoomMember{
 		RoomID: roomID,
 		UserID: userID,
-		Role:   domain.RoleMember,
+		Role:   role,
 	}
 	return s.memberRepo.AddMember(ctx, member)
 }

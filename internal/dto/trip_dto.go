@@ -75,3 +75,21 @@ type CreateTripResponseDTO struct {
 	EndDate         string                `json:"end_date"`
 	Suggestions     []TripScheduleItemDTO `json:"suggestions"`
 }
+
+type JoinTripByInviteCodeRequestDTO struct {
+	InviteCode string `json:"invite_code"`
+}
+
+type JoinTripByInviteCodeResponseDTO struct {
+	TripID          uint   `json:"trip_id"`
+	RoomID          uint   `json:"room_id"`
+	DestinationName string `json:"destination_name"`
+	StartDate       string `json:"start_date"`
+	EndDate         string `json:"end_date"`
+	RoomMemberID    uint   `json:"room_member_id"`
+	UserID          uint   `json:"user_id"`
+	Username        string `json:"username"`
+	Role            int    `json:"role"`
+	RoleName        string `json:"role_name"`
+	JoinedAt        string `json:"joined_at"`
+}
