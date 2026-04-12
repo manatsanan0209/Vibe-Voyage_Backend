@@ -84,6 +84,7 @@ type RecommendedPlace struct {
 type TripRepository interface {
 	GetByID(ctx context.Context, tripID uint) (*Trips, error)
 	GetByRoomID(ctx context.Context, roomID uint) (*Trips, error)
+	IsUserInTripRoom(ctx context.Context, userID, tripID uint) (bool, error)
 	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
 	CreateTripBundle(
 		ctx context.Context,
@@ -99,6 +100,6 @@ type TripRepository interface {
 
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
-	GetTripSchedule(ctx context.Context, tripID uint) (*GetTripScheduleResult, error)
+	GetTripSchedule(ctx context.Context, userID, tripID uint) (*GetTripScheduleResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 }

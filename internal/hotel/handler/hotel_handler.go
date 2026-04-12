@@ -28,8 +28,25 @@ func (h *hotelHandler) RegisterRoutes(app *fiber.App) {
 }
 
 func (h *hotelHandler) List(c *fiber.Ctx) error {
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
+	const maxLimit = 100
+
+	limit, err := strconv.Atoi(c.Query("limit", "20"))
+	if err != nil || limit <= 0 || limit > maxLimit {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.APIResponse[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "bad request",
+			Error:   "limit must be an integer between 1 and 100",
+		})
+	}
+
+	offset, err := strconv.Atoi(c.Query("offset", "0"))
+	if err != nil || offset < 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.APIResponse[any]{
+			Status:  fiber.StatusBadRequest,
+			Message: "bad request",
+			Error:   "offset must be an integer greater than or equal to 0",
+		})
+	}
 
 	filter := domain.HotelFilter{
 		ProvinceID:   c.Query("province_id"),
@@ -153,9 +170,22 @@ func (h *hotelHandler) GetByName(c *fiber.Ctx) error {
 
 	result := make([]map[string]interface{}, 0, len(hotels))
 	for _, h := range hotels {
-		b, _ := json.Marshal(h)
+		b, err := json.Marshal(h)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(dto.APIResponse[any]{
+				Status:  fiber.StatusInternalServerError,
+				Message: "failed to filter hotel fields",
+				Error:   err.Error(),
+			})
+		}
 		var m map[string]interface{}
-		_ = json.Unmarshal(b, &m)
+		if err := json.Unmarshal(b, &m); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(dto.APIResponse[any]{
+				Status:  fiber.StatusInternalServerError,
+				Message: "failed to filter hotel fields",
+				Error:   err.Error(),
+			})
+		}
 		filtered := make(map[string]interface{})
 		for k, v := range m {
 			if fieldSet[k] {

@@ -108,12 +108,45 @@ func (h *roomMemberHandler) GetMembers(c *fiber.Ctx) error {
 }
 
 func (h *roomMemberHandler) AddMember(c *fiber.Ctx) error {
+	requesterID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
 	roomID, err := strconv.ParseUint(c.Params("roomID"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
 			Status:  400,
 			Message: "bad request",
 			Error:   "roomID must be a number",
+		})
+	}
+
+	members, err := h.svc.GetMembersByRoomID(c.Context(), uint(roomID))
+	if err != nil {
+		return c.Status(500).JSON(dto.APIResponse[any]{
+			Status:  500,
+			Message: "failed to validate room permissions",
+			Error:   err.Error(),
+		})
+	}
+
+	isOwner := false
+	for _, m := range members {
+		if m.UserID == requesterID && m.Role == domain.RoleOwner {
+			isOwner = true
+			break
+		}
+	}
+	if !isOwner {
+		return c.Status(403).JSON(dto.APIResponse[any]{
+			Status:  403,
+			Message: "forbidden",
+			Error:   "only room owner can add members",
 		})
 	}
 

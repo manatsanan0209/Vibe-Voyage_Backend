@@ -31,6 +31,20 @@ func (r *tripRepository) GetByRoomID(ctx context.Context, roomID uint) (*domain.
 	return &trip, nil
 }
 
+func (r *tripRepository) IsUserInTripRoom(ctx context.Context, userID, tripID uint) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("room_members rm").
+		Joins("JOIN trips t ON t.room_id = rm.room_id AND t.deleted_at IS NULL").
+		Where("rm.user_id = ? AND rm.deleted_at IS NULL AND t.trip_id = ?", userID, tripID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func (r *tripRepository) GetSchedulesByTripID(ctx context.Context, tripID uint) ([]domain.TripSchedule, error) {
 	var schedules []domain.TripSchedule
 	if err := r.db.WithContext(ctx).

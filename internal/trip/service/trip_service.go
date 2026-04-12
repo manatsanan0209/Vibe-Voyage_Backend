@@ -21,7 +21,15 @@ func NewTripService(repo domain.TripRepository, lifestyleSvc domain.UserLifestyl
 	return &tripService{repo: repo, lifestyleSvc: lifestyleSvc}
 }
 
-func (s *tripService) GetTripSchedule(ctx context.Context, tripID uint) (*domain.GetTripScheduleResult, error) {
+func (s *tripService) GetTripSchedule(ctx context.Context, userID, tripID uint) (*domain.GetTripScheduleResult, error) {
+	allowed, err := s.repo.IsUserInTripRoom(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, errors.New("forbidden")
+	}
+
 	trip, err := s.repo.GetByID(ctx, tripID)
 	if err != nil {
 		return nil, err

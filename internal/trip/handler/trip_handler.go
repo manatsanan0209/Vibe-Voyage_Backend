@@ -42,6 +42,15 @@ func toScheduleItemDTO(item domain.TripSchedule) dto.TripScheduleItemDTO {
 }
 
 func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
 	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
@@ -51,8 +60,15 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.svc.GetTripSchedule(c.Context(), uint(tripID))
+	result, err := h.svc.GetTripSchedule(c.Context(), userID, uint(tripID))
 	if err != nil {
+		if err.Error() == "forbidden" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "you do not have access to this trip",
+			})
+		}
 		return c.Status(500).JSON(dto.APIResponse[any]{
 			Status:  500,
 			Message: "failed to get trip schedule",
