@@ -50,6 +50,24 @@ type UserRoomSummary struct {
 	MembersCount  int64
 }
 
+type CreateRoomLifestyleInput struct {
+	PreferredDestinations []PreferredDestination
+	TravelVibes           []string
+	VoyagePriorities      []string
+	FoodVibes             []string
+	AdditionalNotes       string
+}
+
+type MemberLifestyleSubmissionStatus struct {
+	RoomMemberID          uint
+	RoomID                uint
+	UserID                uint
+	Username              string
+	Role                  int
+	HasSubmittedLifestyle bool
+	SubmittedLifestyleID  *uint
+}
+
 type RoomRepository interface {
 	GetByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
 	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
@@ -62,9 +80,12 @@ type RoomRepository interface {
 type RoomService interface {
 	GetMembersByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
 	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
+	ListMemberLifestyleSubmissions(ctx context.Context, roomID, requesterUserID uint) ([]MemberLifestyleSubmissionStatus, error)
 	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
 	DeleteMember(ctx context.Context, roomID, requesterUserID, roomMemberID uint) error
+	AddRoomLifestyle(ctx context.Context, roomID, userID uint, input CreateRoomLifestyleInput) (*UserLifestyle, error)
 	CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access int, expireTime *time.Time) (*RoomInviteCode, error)
 	JoinByInviteCode(ctx context.Context, userID uint, inviteCode string) (*RoomMember, error)
 	ListInviteCodes(ctx context.Context, roomID, requesterUserID uint) ([]RoomInviteCode, error)
+	ListInviteCodeHistory(ctx context.Context, roomID, requesterUserID uint) ([]RoomInviteCode, error)
 }

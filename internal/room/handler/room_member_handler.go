@@ -9,6 +9,55 @@ import (
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/dto"
 )
 
+func (h *roomHandler) ListMemberLifestyleSubmissions(c *fiber.Ctx) error {
+	requesterID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	roomID, err := strconv.ParseUint(c.Params("roomID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "roomID must be a number",
+		})
+	}
+
+	submissions, err := h.svc.ListMemberLifestyleSubmissions(c.Context(), uint(roomID), requesterID)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to list member lifestyle submissions",
+			Error:   err.Error(),
+		})
+	}
+
+	result := make([]dto.RoomMemberLifestyleSubmissionResponseDTO, 0, len(submissions))
+	for _, submission := range submissions {
+		result = append(result, dto.RoomMemberLifestyleSubmissionResponseDTO{
+			RoomMemberID:          submission.RoomMemberID,
+			RoomID:                submission.RoomID,
+			UserID:                submission.UserID,
+			Username:              submission.Username,
+			Role:                  submission.Role,
+			RoleName:              domain.RoomRoleName(submission.Role),
+			HasSubmittedLifestyle: submission.HasSubmittedLifestyle,
+			LifestyleID:           submission.SubmittedLifestyleID,
+		})
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[[]dto.RoomMemberLifestyleSubmissionResponseDTO]{
+		Status:  200,
+		Message: "success",
+		Data:    &result,
+	})
+}
+
 func (h *roomHandler) GetMembers(c *fiber.Ctx) error {
 	roomID, err := strconv.ParseUint(c.Params("roomID"), 10, 64)
 	if err != nil {

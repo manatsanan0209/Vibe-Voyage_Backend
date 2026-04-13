@@ -10,6 +10,17 @@ type RoomMemberResponseDTO struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+type RoomMemberLifestyleSubmissionResponseDTO struct {
+	RoomMemberID          uint   `json:"room_member_id"`
+	RoomID                uint   `json:"room_id"`
+	UserID                uint   `json:"user_id"`
+	Username              string `json:"username"`
+	Role                  int    `json:"role"`
+	RoleName              string `json:"role_name"`
+	HasSubmittedLifestyle bool   `json:"has_submitted_lifestyle"`
+	LifestyleID           *uint  `json:"lifestyle_id"`
+}
+
 type UserRoomSummaryResponseDTO struct {
 	RoomID        uint   `json:"room_id"`
 	TripID        uint   `json:"trip_id"`
@@ -34,6 +45,26 @@ type CreateRoomInviteCodeRequestDTO struct {
 
 type JoinRoomByInviteCodeRequestDTO struct {
 	InviteCode string `json:"invite_code"`
+}
+
+type AddRoomLifestyleRequestDTO struct {
+	PreferredDestinations []PreferredDestinationDTO `json:"preferred_destinations"`
+	TravelVibes           []string                  `json:"travel_vibes"`
+	VoyagePriorities      []string                  `json:"voyage_priorities"`
+	FoodVibes             []string                  `json:"food_vibes"`
+	AdditionalNotes       string                    `json:"additional_notes"`
+}
+
+type RoomLifestyleResponseDTO struct {
+	LifestyleID           uint                      `json:"lifestyle_id"`
+	UserID                uint                      `json:"user_id"`
+	RoomID                uint                      `json:"room_id"`
+	PreferredDestinations []PreferredDestinationDTO `json:"preferred_destinations"`
+	TravelVibes           []string                  `json:"travel_vibes"`
+	VoyagePriorities      []string                  `json:"voyage_priorities"`
+	FoodVibes             []string                  `json:"food_vibes"`
+	AdditionalNotes       string                    `json:"additional_notes"`
+	CreatedAt             string                    `json:"created_at"`
 }
 
 type RoomInviteCodeResponseDTO struct {

@@ -93,6 +93,14 @@ func (s *roomService) ListInviteCodes(ctx context.Context, roomID, requesterUser
 	return active, nil
 }
 
+func (s *roomService) ListInviteCodeHistory(ctx context.Context, roomID, requesterUserID uint) ([]domain.RoomInviteCode, error) {
+	if err := s.ensureRoomOwner(ctx, roomID, requesterUserID); err != nil {
+		return nil, err
+	}
+
+	return s.inviteRepo.ListByRoomID(ctx, roomID)
+}
+
 func (s *roomService) ensureRoomOwner(ctx context.Context, roomID, requesterUserID uint) error {
 	members, err := s.memberRepo.GetByRoomID(ctx, roomID)
 	if err != nil {
