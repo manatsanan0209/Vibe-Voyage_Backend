@@ -10,29 +10,51 @@ import (
 	"time"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
-	"gorm.io/gorm"
 )
 
 type tripService struct {
-	db           *gorm.DB
+	repo         domain.TripRepository
 	lifestyleSvc domain.UserLifestyleService
+	roomSvc      domain.RoomService
 }
 
-func NewTripService(db *gorm.DB, lifestyleSvc domain.UserLifestyleService) domain.TripService {
-	return &tripService{db: db, lifestyleSvc: lifestyleSvc}
+func NewTripService(repo domain.TripRepository, lifestyleSvc domain.UserLifestyleService, roomSvc domain.RoomService) domain.TripService {
+	return &tripService{repo: repo, lifestyleSvc: lifestyleSvc, roomSvc: roomSvc}
 }
 
-func (s *tripService) GetTripSchedule(ctx context.Context, tripID uint) (*domain.GetTripScheduleResult, error) {
-	var trip domain.Trips
-	if err := s.db.WithContext(ctx).First(&trip, tripID).Error; err != nil {
+func (s *tripService) JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*domain.JoinTripByInviteCodeResult, error) {
+	member, err := s.roomSvc.JoinByInviteCode(ctx, userID, inviteCode)
+	if err != nil {
 		return nil, err
 	}
 
-	var schedules []domain.TripSchedule
-	if err := s.db.WithContext(ctx).
-		Where("trip_id = ?", tripID).
-		Order("day_number ASC, sequence_order ASC").
-		Find(&schedules).Error; err != nil {
+	trip, err := s.repo.GetByRoomID(ctx, member.RoomID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.JoinTripByInviteCodeResult{
+		Trip:   trip,
+		Member: member,
+	}, nil
+}
+
+func (s *tripService) GetTripSchedule(ctx context.Context, userID, tripID uint) (*domain.GetTripScheduleResult, error) {
+	allowed, err := s.repo.IsUserInTripRoom(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, errors.New("forbidden")
+	}
+
+	trip, err := s.repo.GetByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+
+	schedules, err := s.repo.GetSchedulesByTripID(ctx, tripID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -56,7 +78,7 @@ func (s *tripService) GetTripSchedule(ctx context.Context, tripID uint) (*domain
 	}
 
 	return &domain.GetTripScheduleResult{
-		Trip:        &trip,
+		Trip:        trip,
 		Suggestions: suggestions,
 		Days:        days,
 	}, nil
@@ -108,81 +130,19 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 		return nil, errors.New("failed to marshal food_vibes")
 	}
 
-	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		room := &domain.Room{
-			OwnerID:   userID,
-			RoomName:  input.RoomName,
-			RoomImage: input.RoomImage,
-		}
-		if err := tx.Create(room).Error; err != nil {
-			return err
-		}
-
-		trip := &domain.Trips{
-			RoomID:          room.RoomID,
-			DestinationName: input.DestinationName,
-			DestinationID:   input.DestinationID,
-			StartDate:       input.StartDate,
-			EndDate:         input.EndDate,
-		}
-		if err := tx.Create(trip).Error; err != nil {
-			return err
-		}
-
-		member := &domain.RoomMember{
-			RoomID: room.RoomID,
-			UserID: userID,
-			Role:   domain.RoleOwner,
-		}
-		if err := tx.Create(member).Error; err != nil {
-			return err
-		}
-
-		lifestyle := &domain.UserLifestyle{
-			UserID:                userID,
-			RoomID:                room.RoomID,
-			PreferredDestinations: string(preferredDestJSON),
-			TravelVibes:           string(travelVibesJSON),
-			VoyagePriorities:      string(prioritiesJSON),
-			FoodVibes:             string(foodVibesJSON),
-			AdditionalNotes:       input.AdditionalNotes,
-		}
-		if err := tx.Create(lifestyle).Error; err != nil {
-			return err
-		}
-
-		var preferredSchedules []domain.TripSchedule
-		for _, dest := range input.PreferredDestinations {
-			preferredSchedules = append(preferredSchedules, domain.TripSchedule{
-				TripID:        trip.TripID,
-				DayNumber:     0,
-				SequenceOrder: 0,
-				PlaceName:     dest.DestinationName,
-				PlaceID:       dest.DestinationID,
-				Latitude:      dest.Latitude,
-				Longitude:     dest.Longitude,
-				Type:          "preferred_destination",
-			})
-		}
-		if len(preferredSchedules) > 0 {
-			if err := tx.Create(&preferredSchedules).Error; err != nil {
-				return err
-			}
-		}
-
-		result = domain.CreateTripResult{
-			Room:        room,
-			Trip:        trip,
-			Member:      member,
-			Lifestyle:   lifestyle,
-			Suggestions: preferredSchedules,
-		}
-		return nil
-	})
-
+	createdResult, err := s.repo.CreateTripBundle(
+		ctx,
+		userID,
+		input,
+		string(preferredDestJSON),
+		string(travelVibesJSON),
+		string(prioritiesJSON),
+		string(foodVibesJSON),
+	)
 	if err != nil {
 		return nil, err
 	}
+	result = *createdResult
 
 	// Analyze lifestyle and save recommendations as suggestions
 	places, err := s.lifestyleSvc.AnalyzeLifestyle(ctx, result.Lifestyle.LifestyleID)
@@ -204,7 +164,7 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 		}
 		if len(aiSuggestions) > 0 {
 			scheduled := schedulePlaces(aiSuggestions, result.Trip.StartDate, result.Trip.EndDate)
-			if err := s.db.WithContext(ctx).Create(&scheduled).Error; err != nil {
+			if err := s.repo.CreateSchedules(ctx, scheduled); err != nil {
 				log.Printf("[CreateTrip] failed to save suggestions: %v", err)
 			} else {
 				result.Suggestions = append(result.Suggestions, scheduled...)
@@ -245,7 +205,7 @@ func (s *tripService) CreateTripSchedule(ctx context.Context, inputs []domain.Cr
 		})
 	}
 
-	if err := s.db.WithContext(ctx).Create(&schedules).Error; err != nil {
+	if err := s.repo.CreateSchedules(ctx, schedules); err != nil {
 		return nil, err
 	}
 
@@ -303,11 +263,13 @@ func nearestNeighborOrder(places []domain.TripSchedule) []domain.TripSchedule {
 
 // schedulePlaces assigns DayNumber and SequenceOrder to places by:
 // 1. Ordering them with nearest-neighbor (geographically close places together)
-// 2. Distributing evenly across the trip days
+// 2. Distributing evenly across the trip days (max 4 places per day)
 func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) []domain.TripSchedule {
 	if len(places) == 0 {
 		return places
 	}
+
+	const maxPlacesPerDay = 4
 
 	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
 	if totalDays < 1 {
@@ -316,10 +278,19 @@ func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) 
 
 	ordered := nearestNeighborOrder(places)
 
+	// Truncate to at most 4 places per day
+	maxPlaces := totalDays * maxPlacesPerDay
+	if len(ordered) > maxPlaces {
+		ordered = ordered[:maxPlaces]
+	}
+
 	// ceiling division: spread extras into earlier days
 	placesPerDay := (len(ordered) + totalDays - 1) / totalDays
 	if placesPerDay < 1 {
 		placesPerDay = 1
+	}
+	if placesPerDay > maxPlacesPerDay {
+		placesPerDay = maxPlacesPerDay
 	}
 
 	for i := range ordered {

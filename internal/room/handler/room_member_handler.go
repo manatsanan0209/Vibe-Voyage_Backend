@@ -1,43 +1,64 @@
 package handler
 
 import (
-	"os"
 	"strconv"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/token"
+	authMiddleware "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/middleware"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/dto"
 )
 
-type roomMemberHandler struct {
-	svc domain.RoomMemberService
-}
-
-func NewRoomMemberHandler(svc domain.RoomMemberService) *roomMemberHandler {
-	return &roomMemberHandler{svc: svc}
-}
-
-func (h *roomMemberHandler) RegisterRoutes(app *fiber.App) {
-	api := app.Group("/api/rooms")
-	api.Get("/:roomID/members", h.GetMembers)
-	api.Post("/:roomID/members", h.AddMember)
-	api.Delete("/:roomID/members/:memberID", h.DeleteMember)
-}
-
-func roleName(role int) string {
-	switch role {
-	case domain.RoleOwner:
-		return "owner"
-	case domain.RoleMember:
-		return "member"
-	default:
-		return "unknown"
+func (h *roomHandler) ListMemberLifestyleSubmissions(c *fiber.Ctx) error {
+	requesterID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
 	}
+
+	roomID, err := strconv.ParseUint(c.Params("roomID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "roomID must be a number",
+		})
+	}
+
+	submissions, err := h.svc.ListMemberLifestyleSubmissions(c.Context(), uint(roomID), requesterID)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to list member lifestyle submissions",
+			Error:   err.Error(),
+		})
+	}
+
+	result := make([]dto.RoomMemberLifestyleSubmissionResponseDTO, 0, len(submissions))
+	for _, submission := range submissions {
+		result = append(result, dto.RoomMemberLifestyleSubmissionResponseDTO{
+			RoomMemberID:          submission.RoomMemberID,
+			RoomID:                submission.RoomID,
+			UserID:                submission.UserID,
+			Username:              submission.Username,
+			Role:                  submission.Role,
+			RoleName:              domain.RoomRoleName(submission.Role),
+			HasSubmittedLifestyle: submission.HasSubmittedLifestyle,
+			LifestyleID:           submission.SubmittedLifestyleID,
+		})
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[[]dto.RoomMemberLifestyleSubmissionResponseDTO]{
+		Status:  200,
+		Message: "success",
+		Data:    &result,
+	})
 }
 
-func (h *roomMemberHandler) GetMembers(c *fiber.Ctx) error {
+func (h *roomHandler) GetMembers(c *fiber.Ctx) error {
 	roomID, err := strconv.ParseUint(c.Params("roomID"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
@@ -64,7 +85,7 @@ func (h *roomMemberHandler) GetMembers(c *fiber.Ctx) error {
 			UserID:       m.UserID,
 			Username:     m.User.Username,
 			Role:         m.Role,
-			RoleName:     roleName(m.Role),
+			RoleName:     domain.RoomRoleName(m.Role),
 			CreatedAt:    m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
@@ -76,23 +97,13 @@ func (h *roomMemberHandler) GetMembers(c *fiber.Ctx) error {
 	})
 }
 
-func (h *roomMemberHandler) AddMember(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+func (h *roomHandler) AddMember(c *fiber.Ctx) error {
+	requesterID, ok := authMiddleware.GetUserID(c)
+	if !ok {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	if _, err := token.Validate(tokenStr, secret); err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
+			Error:   "invalid token claims",
 		})
 	}
 
@@ -102,6 +113,30 @@ func (h *roomMemberHandler) AddMember(c *fiber.Ctx) error {
 			Status:  400,
 			Message: "bad request",
 			Error:   "roomID must be a number",
+		})
+	}
+
+	members, err := h.svc.GetMembersByRoomID(c.Context(), uint(roomID))
+	if err != nil {
+		return c.Status(500).JSON(dto.APIResponse[any]{
+			Status:  500,
+			Message: "failed to validate room permissions",
+			Error:   err.Error(),
+		})
+	}
+
+	isOwner := false
+	for _, m := range members {
+		if m.UserID == requesterID && m.Role == domain.RoleOwner {
+			isOwner = true
+			break
+		}
+	}
+	if !isOwner {
+		return c.Status(403).JSON(dto.APIResponse[any]{
+			Status:  403,
+			Message: "forbidden",
+			Error:   "only room owner can add members",
 		})
 	}
 
@@ -137,7 +172,7 @@ func (h *roomMemberHandler) AddMember(c *fiber.Ctx) error {
 		UserID:       member.UserID,
 		Username:     member.User.Username,
 		Role:         member.Role,
-		RoleName:     roleName(member.Role),
+		RoleName:     domain.RoomRoleName(member.Role),
 		CreatedAt:    member.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 
@@ -148,24 +183,13 @@ func (h *roomMemberHandler) AddMember(c *fiber.Ctx) error {
 	})
 }
 
-func (h *roomMemberHandler) DeleteMember(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+func (h *roomHandler) DeleteMember(c *fiber.Ctx) error {
+	requesterID, ok := authMiddleware.GetUserID(c)
+	if !ok {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	claims, err := token.Validate(tokenStr, secret)
-	if err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
+			Error:   "invalid token claims",
 		})
 	}
 
@@ -187,7 +211,7 @@ func (h *roomMemberHandler) DeleteMember(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.svc.DeleteMember(c.Context(), uint(roomID), claims.UserID, uint(memberID)); err != nil {
+	if err := h.svc.DeleteMember(c.Context(), uint(roomID), requesterID, uint(memberID)); err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
 			Status:  400,
 			Message: "failed to remove member",

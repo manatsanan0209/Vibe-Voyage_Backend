@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	authMiddleware "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/middleware"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/dto"
 )
@@ -17,30 +18,11 @@ func NewUserLifestyleHandler(svc domain.UserLifestyleService) *userLifestyleHand
 }
 
 func (h *userLifestyleHandler) RegisterRoutes(app *fiber.App) {
-	api := app.Group("/api/user_lifestyle")
+	api := app.Group("/api/user_lifestyle", authMiddleware.Authorize())
 	api.Post("/analyzelifestyle/:id", h.AnalyzeLifestyle)
 }
 
 func (h *userLifestyleHandler) AnalyzeLifestyle(c *fiber.Ctx) error {
-	// authHeader := c.Get("Authorization")
-	// if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-	// 	return c.Status(401).JSON(dto.APIResponse[any]{
-	// 		Status:  401,
-	// 		Message: "unauthorized",
-	// 		Error:   "missing or invalid authorization header",
-	// 	})
-	// }
-
-	// tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	// secret := os.Getenv("AUTH_TOKEN_SECRET")
-	// if _, err := token.Validate(tokenStr, secret); err != nil {
-	// 	return c.Status(401).JSON(dto.APIResponse[any]{
-	// 		Status:  401,
-	// 		Message: "unauthorized",
-	// 		Error:   err.Error(),
-	// 	})
-	// }
-
 	lifestyleID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{

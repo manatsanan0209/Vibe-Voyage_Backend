@@ -1,13 +1,11 @@
 package handler
 
 import (
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/token"
+	authMiddleware "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth/middleware"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/dto"
 )
@@ -22,7 +20,9 @@ func NewTripHandler(svc domain.TripService) *tripHandler {
 
 func (h *tripHandler) RegisterRoutes(app *fiber.App) {
 	api := app.Group("/api/trip")
+	api.Use(authMiddleware.Authorize())
 	api.Post("/", h.CreateTrip)
+	api.Post("/join-by-invite-code", h.JoinTripByInviteCode)
 	api.Get("/:tripID/schedule", h.GetTripSchedule)
 	api.Post("/:tripID/schedule", h.CreateTripSchedule)
 }
@@ -43,22 +43,12 @@ func toScheduleItemDTO(item domain.TripSchedule) dto.TripScheduleItemDTO {
 }
 
 func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	if _, err := token.Validate(tokenStr, secret); err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
+			Error:   "invalid token claims",
 		})
 	}
 
@@ -71,8 +61,15 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.svc.GetTripSchedule(c.Context(), uint(tripID))
+	result, err := h.svc.GetTripSchedule(c.Context(), userID, uint(tripID))
 	if err != nil {
+		if err.Error() == "forbidden" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "you do not have access to this trip",
+			})
+		}
 		return c.Status(500).JSON(dto.APIResponse[any]{
 			Status:  500,
 			Message: "failed to get trip schedule",
@@ -114,23 +111,12 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 }
 
 func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
-		})
-	}
-
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	claims, err := token.Validate(tokenStr, secret)
-	if err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
-			Error:   err.Error(),
+			Error:   "invalid token claims",
 		})
 	}
 
@@ -185,7 +171,7 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 		AdditionalNotes:       req.AdditionalNotes,
 	}
 
-	result, err := h.svc.CreateTrip(c.Context(), claims.UserID, input)
+	result, err := h.svc.CreateTrip(c.Context(), userID, input)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{
 			Status:  400,
@@ -218,26 +204,56 @@ func (h *tripHandler) CreateTrip(c *fiber.Ctx) error {
 	})
 }
 
-func (h *tripHandler) CreateTripSchedule(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+func (h *tripHandler) JoinTripByInviteCode(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "missing or invalid authorization header",
+			Error:   "invalid token claims",
 		})
 	}
 
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-	secret := os.Getenv("AUTH_TOKEN_SECRET")
-	if _, err := token.Validate(tokenStr, secret); err != nil {
-		return c.Status(401).JSON(dto.APIResponse[any]{
-			Status:  401,
-			Message: "unauthorized",
+	req := new(dto.JoinTripByInviteCodeRequestDTO)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "invalid request body",
+		})
+	}
+
+	result, err := h.svc.JoinTripByInviteCode(c.Context(), userID, req.InviteCode)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to join trip",
 			Error:   err.Error(),
 		})
 	}
 
+	resp := dto.JoinTripByInviteCodeResponseDTO{
+		TripID:          result.Trip.TripID,
+		RoomID:          result.Trip.RoomID,
+		DestinationName: result.Trip.DestinationName,
+		StartDate:       result.Trip.StartDate.Format("2006-01-02"),
+		EndDate:         result.Trip.EndDate.Format("2006-01-02"),
+		RoomMemberID:    result.Member.RoomMemberID,
+		UserID:          result.Member.UserID,
+		Username:        result.Member.User.Username,
+		Role:            result.Member.Role,
+		RoleName:        domain.RoomRoleName(result.Member.Role),
+		JoinedAt:        result.Member.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+
+	return c.Status(201).JSON(dto.APIResponse[dto.JoinTripByInviteCodeResponseDTO]{
+		Status:  201,
+		Message: "joined trip successfully",
+		Data:    &resp,
+	})
+}
+
+func (h *tripHandler) CreateTripSchedule(c *fiber.Ctx) error {
 	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
 	if err != nil {
 		return c.Status(400).JSON(dto.APIResponse[any]{

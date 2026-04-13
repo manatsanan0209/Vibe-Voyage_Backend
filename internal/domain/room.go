@@ -15,5 +15,5 @@ type Room struct {
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
-	Trips     []Trips        `json:"-" gorm:"foreignKey:RoomID;references:RoomID"`
+	Trip      *Trips         `json:"-" gorm:"foreignKey:RoomID;references:RoomID"`
 }

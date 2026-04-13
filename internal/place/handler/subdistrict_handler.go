@@ -30,10 +30,11 @@ func (h *subdistrictHandler) GetAll(c *fiber.Ctx) error {
 			Error:   err.Error(),
 		})
 	}
-	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]*domain.Subdistrict]{
+	result := dto.NewSubdistrictResponseDTOList(subdistricts)
+	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]dto.SubdistrictResponseDTO]{
 		Status:  fiber.StatusOK,
 		Message: "success",
-		Data:    &subdistricts,
+		Data:    &result,
 	})
 }
 
@@ -54,10 +55,11 @@ func (h *subdistrictHandler) GetByID(c *fiber.Ctx) error {
 			Error:   "not found",
 		})
 	}
-	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[domain.Subdistrict]{
+	result := dto.NewSubdistrictResponseDTO(subdistrict)
+	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[dto.SubdistrictResponseDTO]{
 		Status:  fiber.StatusOK,
 		Message: "success",
-		Data:    subdistrict,
+		Data:    result,
 	})
 }
 
@@ -71,9 +73,10 @@ func (h *subdistrictHandler) GetByDistrictID(c *fiber.Ctx) error {
 			Error:   err.Error(),
 		})
 	}
-	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]*domain.Subdistrict]{
+	result := dto.NewSubdistrictResponseDTOList(subdistricts)
+	return c.Status(fiber.StatusOK).JSON(dto.APIResponse[[]dto.SubdistrictResponseDTO]{
 		Status:  fiber.StatusOK,
 		Message: "success",
-		Data:    &subdistricts,
+		Data:    &result,
 	})
 }

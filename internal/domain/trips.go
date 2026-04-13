@@ -9,7 +9,7 @@ import (
 
 type Trips struct {
 	TripID              uint           `json:"trip_id" gorm:"primaryKey;autoIncrement"`
-	RoomID              uint           `json:"room_id" gorm:"not null;index"`
+	RoomID              uint           `json:"room_id" gorm:"not null;uniqueIndex"`
 	Room                Room           `json:"-" gorm:"foreignKey:RoomID;references:RoomID;"`
 	DestinationName     string         `json:"destination_name" gorm:"not null"`
 	DestinationID       string         `json:"destination_id" gorm:"not null"`
@@ -50,6 +50,11 @@ type CreateTripResult struct {
 	Suggestions []TripSchedule
 }
 
+type JoinTripByInviteCodeResult struct {
+	Trip   *Trips
+	Member *RoomMember
+}
+
 type DaySchedule struct {
 	DayNumber int
 	Items     []TripSchedule
@@ -81,8 +86,26 @@ type RecommendedPlace struct {
 	Longitude float64 `json:"longitude"`
 }
 
+type TripRepository interface {
+	GetByID(ctx context.Context, tripID uint) (*Trips, error)
+	GetByRoomID(ctx context.Context, roomID uint) (*Trips, error)
+	IsUserInTripRoom(ctx context.Context, userID, tripID uint) (bool, error)
+	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
+	CreateTripBundle(
+		ctx context.Context,
+		userID uint,
+		input CreateTripInput,
+		preferredDestinationsJSON string,
+		travelVibesJSON string,
+		voyagePrioritiesJSON string,
+		foodVibesJSON string,
+	) (*CreateTripResult, error)
+	CreateSchedules(ctx context.Context, schedules []TripSchedule) error
+}
+
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
-	GetTripSchedule(ctx context.Context, tripID uint) (*GetTripScheduleResult, error)
+	JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*JoinTripByInviteCodeResult, error)
+	GetTripSchedule(ctx context.Context, userID, tripID uint) (*GetTripScheduleResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 }

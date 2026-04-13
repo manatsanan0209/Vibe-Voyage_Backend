@@ -29,7 +29,20 @@ type UserLifestyleRepository interface {
 	GetByID(ctx context.Context, lifestyleID uint) (*UserLifestyle, error)
 	GetByUserAndRoom(ctx context.Context, userID, roomID uint) (*UserLifestyle, error)
 	GetByRoomID(ctx context.Context, roomID uint) ([]UserLifestyle, error)
+	GetTripByRoomID(ctx context.Context, roomID uint) (*Trips, error)
+	UpdateStructuredLifestyle(ctx context.Context, lifestyleID uint, structuredLifestyle string) error
 	Update(ctx context.Context, lifestyle *UserLifestyle) error
+}
+
+type RecommendationRequest struct {
+	AttractionTypes []string
+	Destination     string
+	LifestyleText   string
+	LifestyleTypes  []string
+}
+
+type RecommendationClient interface {
+	Recommend(ctx context.Context, req RecommendationRequest) ([]RecommendedPlace, string, error)
 }
 
 type UserLifestyleService interface {
