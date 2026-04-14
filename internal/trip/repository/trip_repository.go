@@ -45,6 +45,29 @@ func (r *tripRepository) IsUserInTripRoom(ctx context.Context, userID, tripID ui
 	return count > 0, nil
 }
 
+func (r *tripRepository) GetUserRoleInTripRoom(ctx context.Context, userID, tripID uint) (int, bool, error) {
+	var row struct {
+		Role int
+	}
+
+	err := r.db.WithContext(ctx).
+		Table("room_members rm").
+		Select("rm.role").
+		Joins("JOIN trips t ON t.room_id = rm.room_id AND t.deleted_at IS NULL").
+		Where("rm.user_id = ? AND rm.deleted_at IS NULL AND t.trip_id = ?", userID, tripID).
+		Limit(1).
+		Scan(&row).Error
+	if err != nil {
+		return 0, false, err
+	}
+
+	if row.Role == 0 {
+		return 0, false, nil
+	}
+
+	return row.Role, true, nil
+}
+
 func (r *tripRepository) GetSchedulesByTripID(ctx context.Context, tripID uint) ([]domain.TripSchedule, error) {
 	var schedules []domain.TripSchedule
 	if err := r.db.WithContext(ctx).
@@ -150,4 +173,18 @@ func (r *tripRepository) CreateSchedules(ctx context.Context, schedules []domain
 		return nil
 	}
 	return r.db.WithContext(ctx).Create(&schedules).Error
+}
+
+func (r *tripRepository) ReplaceSchedulesByTripID(ctx context.Context, tripID uint, schedules []domain.TripSchedule) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("trip_id = ?", tripID).Delete(&domain.TripSchedule{}).Error; err != nil {
+			return err
+		}
+
+		if len(schedules) == 0 {
+			return nil
+		}
+
+		return tx.Create(&schedules).Error
+	})
 }

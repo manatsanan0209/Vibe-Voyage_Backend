@@ -25,6 +25,7 @@ func (h *tripHandler) RegisterRoutes(app *fiber.App) {
 	api.Post("/join-by-invite-code", h.JoinTripByInviteCode)
 	api.Get("/:tripID/schedule", h.GetTripSchedule)
 	api.Post("/:tripID/schedule", h.CreateTripSchedule)
+	api.Put("/:tripID/schedule", h.ReplaceTripSchedule)
 }
 
 func toScheduleItemDTO(item domain.TripSchedule) dto.TripScheduleItemDTO {
@@ -305,6 +306,79 @@ func (h *tripHandler) CreateTripSchedule(c *fiber.Ctx) error {
 	return c.Status(201).JSON(dto.APIResponse[[]dto.TripScheduleItemDTO]{
 		Status:  201,
 		Message: "trip schedule created successfully",
+		Data:    &result,
+	})
+}
+
+func (h *tripHandler) ReplaceTripSchedule(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "tripID must be a number",
+		})
+	}
+
+	req := new(dto.CreateTripScheduleRequestDTO)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "invalid request body",
+		})
+	}
+
+	inputs := make([]domain.CreateTripScheduleInput, len(req.Items))
+	for i, item := range req.Items {
+		inputs[i] = domain.CreateTripScheduleInput{
+			TripID:        uint(tripID),
+			DayNumber:     item.DayNumber,
+			SequenceOrder: item.SequenceOrder,
+			PlaceName:     item.PlaceName,
+			PlaceID:       item.PlaceID,
+			Latitude:      item.Latitude,
+			Longitude:     item.Longitude,
+			StartTime:     item.StartTime,
+			EndTime:       item.EndTime,
+			Type:          item.Type,
+		}
+	}
+
+	replaced, err := h.svc.ReplaceTripSchedule(c.Context(), userID, uint(tripID), inputs)
+	if err != nil {
+		if err.Error() == "forbidden" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "you do not have permission to edit this trip schedule",
+			})
+		}
+
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to replace trip schedule",
+			Error:   err.Error(),
+		})
+	}
+
+	result := make([]dto.TripScheduleItemDTO, len(replaced))
+	for i, item := range replaced {
+		result[i] = toScheduleItemDTO(item)
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[[]dto.TripScheduleItemDTO]{
+		Status:  200,
+		Message: "trip schedule replaced successfully",
 		Data:    &result,
 	})
 }

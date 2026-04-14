@@ -90,6 +90,7 @@ type TripRepository interface {
 	GetByID(ctx context.Context, tripID uint) (*Trips, error)
 	GetByRoomID(ctx context.Context, roomID uint) (*Trips, error)
 	IsUserInTripRoom(ctx context.Context, userID, tripID uint) (bool, error)
+	GetUserRoleInTripRoom(ctx context.Context, userID, tripID uint) (int, bool, error)
 	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
 	CreateTripBundle(
 		ctx context.Context,
@@ -101,6 +102,7 @@ type TripRepository interface {
 		foodVibesJSON string,
 	) (*CreateTripResult, error)
 	CreateSchedules(ctx context.Context, schedules []TripSchedule) error
+	ReplaceSchedulesByTripID(ctx context.Context, tripID uint, schedules []TripSchedule) error
 }
 
 type TripService interface {
@@ -108,4 +110,5 @@ type TripService interface {
 	JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*JoinTripByInviteCodeResult, error)
 	GetTripSchedule(ctx context.Context, userID, tripID uint) (*GetTripScheduleResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
+	ReplaceTripSchedule(ctx context.Context, userID, tripID uint, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 }

@@ -212,6 +212,51 @@ func (s *tripService) CreateTripSchedule(ctx context.Context, inputs []domain.Cr
 	return schedules, nil
 }
 
+func (s *tripService) ReplaceTripSchedule(ctx context.Context, userID, tripID uint, inputs []domain.CreateTripScheduleInput) ([]domain.TripSchedule, error) {
+	role, exists, err := s.repo.GetUserRoleInTripRoom(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("forbidden")
+	}
+
+	if role != domain.RoleOwner && role != domain.RoleMember {
+		return nil, errors.New("forbidden")
+	}
+
+	schedules := make([]domain.TripSchedule, 0, len(inputs))
+	for _, inp := range inputs {
+		startTime, err := time.Parse("15:04", inp.StartTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_time %q: must be HH:MM", inp.StartTime)
+		}
+		endTime, err := time.Parse("15:04", inp.EndTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_time %q: must be HH:MM", inp.EndTime)
+		}
+
+		schedules = append(schedules, domain.TripSchedule{
+			TripID:        tripID,
+			DayNumber:     inp.DayNumber,
+			SequenceOrder: inp.SequenceOrder,
+			PlaceName:     inp.PlaceName,
+			PlaceID:       inp.PlaceID,
+			Latitude:      inp.Latitude,
+			Longitude:     inp.Longitude,
+			StartTime:     startTime,
+			EndTime:       endTime,
+			Type:          inp.Type,
+		})
+	}
+
+	if err := s.repo.ReplaceSchedulesByTripID(ctx, tripID, schedules); err != nil {
+		return nil, err
+	}
+
+	return schedules, nil
+}
+
 // haversine returns the great-circle distance in km between two lat/lng points.
 func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	const R = 6371.0
