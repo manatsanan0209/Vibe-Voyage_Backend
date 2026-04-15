@@ -83,6 +83,7 @@ type RoomService interface {
 	ListMemberLifestyleSubmissions(ctx context.Context, roomID, requesterUserID uint) ([]MemberLifestyleSubmissionStatus, error)
 	AddMember(ctx context.Context, roomID, userID uint) (*RoomMember, error)
 	DeleteMember(ctx context.Context, roomID, requesterUserID, roomMemberID uint) error
+	LeaveRoom(ctx context.Context, roomID, userID uint) error
 	AddRoomLifestyle(ctx context.Context, roomID, userID uint, input CreateRoomLifestyleInput) (*UserLifestyle, error)
 	CreateInviteCode(ctx context.Context, roomID, creatorUserID uint, access int, expireTime *time.Time) (*RoomInviteCode, error)
 	JoinByInviteCode(ctx context.Context, userID uint, inviteCode string) (*RoomMember, error)

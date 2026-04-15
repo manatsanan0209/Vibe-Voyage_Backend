@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 )
@@ -69,7 +70,35 @@ func (s *roomService) AddRoomLifestyle(ctx context.Context, roomID, userID uint,
 		return nil, err
 	}
 
+	s.enqueueLifestyleAnalyze(lifestyle.LifestyleID)
+
 	return lifestyle, nil
+}
+
+func (s *roomService) enqueueLifestyleAnalyze(lifestyleID uint) {
+	if s.userLifestyleSvc == nil {
+		return
+	}
+
+	go func() {
+		s.analyzeSemaphore <- struct{}{}
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[RoomLifestyle] async analyze panic (lifestyle_id=%d): %v", lifestyleID, r)
+			}
+			<-s.analyzeSemaphore
+		}()
+
+		asyncCtx, cancel := context.WithTimeout(context.Background(), s.analyzeTimeout)
+		defer cancel()
+
+		if _, err := s.userLifestyleSvc.AnalyzeLifestyle(asyncCtx, lifestyleID); err != nil {
+			log.Printf("[RoomLifestyle] async analyze failed (lifestyle_id=%d): %v", lifestyleID, err)
+			return
+		}
+
+		log.Printf("[RoomLifestyle] async analyze completed (lifestyle_id=%d)", lifestyleID)
+	}()
 }
 
 func (s *roomService) getMemberRole(ctx context.Context, roomID, userID uint) (int, error) {

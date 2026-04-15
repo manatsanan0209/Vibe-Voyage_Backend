@@ -24,6 +24,7 @@ func (h *roomHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/:roomID/members/lifestyle-submissions", h.ListMemberLifestyleSubmissions)
 	api.Post("/:roomID/members", h.AddMember)
 	api.Delete("/:roomID/members/:memberID", h.DeleteMember)
+	api.Delete("/:roomID/leave", h.LeaveRoom)
 	api.Post("/:roomID/lifestyle", h.AddLifestyle)
 	api.Get("/:roomID/invite-codes/history", h.ListInviteCodeHistory)
 	api.Get("/:roomID/invite-codes", h.ListInviteCodes)
