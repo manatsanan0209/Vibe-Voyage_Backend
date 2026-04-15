@@ -52,6 +52,12 @@ func (r *userLifestyleRepository) GetByRoomID(ctx context.Context, roomID uint) 
 	return lifestyles, nil
 }
 
+func (r *userLifestyleRepository) DeleteByUserAndRoom(ctx context.Context, userID, roomID uint) error {
+	return r.db.WithContext(ctx).
+		Where("user_id = ? AND room_id = ?", userID, roomID).
+		Delete(&domain.UserLifestyle{}).Error
+}
+
 func (r *userLifestyleRepository) GetTripByRoomID(ctx context.Context, roomID uint) (*domain.Trips, error) {
 	var trip domain.Trips
 	if err := r.db.WithContext(ctx).

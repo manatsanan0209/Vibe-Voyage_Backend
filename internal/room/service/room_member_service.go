@@ -39,7 +39,44 @@ func (s *roomService) DeleteMember(ctx context.Context, roomID, requesterUserID,
 		return errors.New("cannot remove the room owner")
 	}
 
+	if err := s.lifestyleRepo.DeleteByUserAndRoom(ctx, target.UserID, target.RoomID); err != nil {
+		return err
+	}
+
 	return s.memberRepo.DeleteMember(ctx, roomMemberID)
+}
+
+func (s *roomService) LeaveRoom(ctx context.Context, roomID, userID uint) error {
+	members, err := s.memberRepo.GetByRoomID(ctx, roomID)
+	if err != nil {
+		return err
+	}
+
+	var myMemberID uint
+	var myRole int
+	found := false
+	for _, member := range members {
+		if member.UserID == userID {
+			myMemberID = member.RoomMemberID
+			myRole = member.Role
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.New("you are not a member of this room")
+	}
+
+	if myRole == domain.RoleOwner {
+		return errors.New("room owner cannot leave room")
+	}
+
+	if err := s.lifestyleRepo.DeleteByUserAndRoom(ctx, userID, roomID); err != nil {
+		return err
+	}
+
+	return s.memberRepo.DeleteMember(ctx, myMemberID)
 }
 
 func (s *roomService) AddMember(ctx context.Context, roomID, userID uint) (*domain.RoomMember, error) {

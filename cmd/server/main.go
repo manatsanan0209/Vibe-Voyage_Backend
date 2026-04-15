@@ -71,9 +71,9 @@ func Run() error {
 	roomRepository := roomRepoPkg.NewRoomRepository(gormDB)
 	roomInviteRepository := roomRepoPkg.NewRoomInviteCodeRepository(gormDB)
 	lifestyleRepository := userLifestyleRepo.NewUserLifestyleRepository(gormDB)
-	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository)
 	recommendationClient := userLifestyleClient.NewHTTPRecommendationClient()
 	lifestyleSvc := userLifestyleService.NewUserLifestyleService(lifestyleRepository, recommendationClient)
+	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc)
 	tripSvc := tripService.NewTripService(tripRepository, lifestyleSvc, roomSvc)
 
 	healthPkg.RegisterRoutes(app)
@@ -86,7 +86,7 @@ func Run() error {
 	restaurantPkg.Setup(app, gormDB)
 	tripPkg.Setup(app, tripSvc)
 	userLifestylePkg.Setup(app, lifestyleSvc)
-	roomPkg.Setup(app, gormDB)
+	roomPkg.Setup(app, roomSvc)
 
 	return app.Listen(":8080")
 }

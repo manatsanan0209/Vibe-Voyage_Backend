@@ -224,3 +224,36 @@ func (h *roomHandler) DeleteMember(c *fiber.Ctx) error {
 		Message: "member removed successfully",
 	})
 }
+
+func (h *roomHandler) LeaveRoom(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	roomID, err := strconv.ParseUint(c.Params("roomID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "roomID must be a number",
+		})
+	}
+
+	if err := h.svc.LeaveRoom(c.Context(), uint(roomID), userID); err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to leave room",
+			Error:   err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[any]{
+		Status:  200,
+		Message: "left room successfully",
+	})
+}

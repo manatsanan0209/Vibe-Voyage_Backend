@@ -13,13 +13,21 @@ import (
 )
 
 type tripService struct {
-	repo         domain.TripRepository
-	lifestyleSvc domain.UserLifestyleService
-	roomSvc      domain.RoomService
+	repo             domain.TripRepository
+	lifestyleSvc     domain.UserLifestyleService
+	roomSvc          domain.RoomService
+	analyzeSemaphore chan struct{}
+	analyzeTimeout   time.Duration
 }
 
 func NewTripService(repo domain.TripRepository, lifestyleSvc domain.UserLifestyleService, roomSvc domain.RoomService) domain.TripService {
-	return &tripService{repo: repo, lifestyleSvc: lifestyleSvc, roomSvc: roomSvc}
+	return &tripService{
+		repo:             repo,
+		lifestyleSvc:     lifestyleSvc,
+		roomSvc:          roomSvc,
+		analyzeSemaphore: make(chan struct{}, 5),
+		analyzeTimeout:   45 * time.Second,
+	}
 }
 
 func (s *tripService) JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*domain.JoinTripByInviteCodeResult, error) {
@@ -144,15 +152,39 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 	}
 	result = *createdResult
 
-	// Analyze lifestyle and save recommendations as suggestions
-	places, err := s.lifestyleSvc.AnalyzeLifestyle(ctx, result.Lifestyle.LifestyleID)
-	if err != nil {
-		log.Printf("[CreateTrip] AnalyzeLifestyle failed (lifestyle_id=%d): %v", result.Lifestyle.LifestyleID, err)
-	} else {
+	s.enqueueAnalyzeAndSaveSuggestions(
+		result.Lifestyle.LifestyleID,
+		result.Trip.TripID,
+		result.Trip.StartDate,
+		result.Trip.EndDate,
+	)
+
+	return &result, nil
+}
+
+func (s *tripService) enqueueAnalyzeAndSaveSuggestions(lifestyleID, tripID uint, startDate, endDate time.Time) {
+	go func() {
+		s.analyzeSemaphore <- struct{}{}
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[CreateTrip] async analyze panic (lifestyle_id=%d): %v", lifestyleID, r)
+			}
+			<-s.analyzeSemaphore
+		}()
+
+		asyncCtx, cancel := context.WithTimeout(context.Background(), s.analyzeTimeout)
+		defer cancel()
+
+		places, err := s.lifestyleSvc.AnalyzeLifestyle(asyncCtx, lifestyleID)
+		if err != nil {
+			log.Printf("[CreateTrip] async analyze failed (lifestyle_id=%d): %v", lifestyleID, err)
+			return
+		}
+
 		aiSuggestions := make([]domain.TripSchedule, 0, len(places))
 		for _, p := range places {
 			aiSuggestions = append(aiSuggestions, domain.TripSchedule{
-				TripID:        result.Trip.TripID,
+				TripID:        tripID,
 				DayNumber:     0,
 				SequenceOrder: 0,
 				PlaceName:     p.Name,
@@ -162,17 +194,20 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 				Type:          p.Category,
 			})
 		}
-		if len(aiSuggestions) > 0 {
-			scheduled := schedulePlaces(aiSuggestions, result.Trip.StartDate, result.Trip.EndDate)
-			if err := s.repo.CreateSchedules(ctx, scheduled); err != nil {
-				log.Printf("[CreateTrip] failed to save suggestions: %v", err)
-			} else {
-				result.Suggestions = append(result.Suggestions, scheduled...)
-			}
-		}
-	}
 
-	return &result, nil
+		if len(aiSuggestions) == 0 {
+			log.Printf("[CreateTrip] async analyze completed with no suggestions (lifestyle_id=%d)", lifestyleID)
+			return
+		}
+
+		scheduled := schedulePlaces(aiSuggestions, startDate, endDate)
+		if err := s.repo.CreateSchedules(asyncCtx, scheduled); err != nil {
+			log.Printf("[CreateTrip] async save suggestions failed (trip_id=%d, lifestyle_id=%d): %v", tripID, lifestyleID, err)
+			return
+		}
+
+		log.Printf("[CreateTrip] async suggestions saved (trip_id=%d, lifestyle_id=%d, count=%d)", tripID, lifestyleID, len(scheduled))
+	}()
 }
 
 func (s *tripService) CreateTripSchedule(ctx context.Context, inputs []domain.CreateTripScheduleInput) ([]domain.TripSchedule, error) {
@@ -206,6 +241,51 @@ func (s *tripService) CreateTripSchedule(ctx context.Context, inputs []domain.Cr
 	}
 
 	if err := s.repo.CreateSchedules(ctx, schedules); err != nil {
+		return nil, err
+	}
+
+	return schedules, nil
+}
+
+func (s *tripService) ReplaceTripSchedule(ctx context.Context, userID, tripID uint, inputs []domain.CreateTripScheduleInput) ([]domain.TripSchedule, error) {
+	role, exists, err := s.repo.GetUserRoleInTripRoom(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, errors.New("forbidden")
+	}
+
+	if role != domain.RoleOwner && role != domain.RoleMember {
+		return nil, errors.New("forbidden")
+	}
+
+	schedules := make([]domain.TripSchedule, 0, len(inputs))
+	for _, inp := range inputs {
+		startTime, err := time.Parse("15:04", inp.StartTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid start_time %q: must be HH:MM", inp.StartTime)
+		}
+		endTime, err := time.Parse("15:04", inp.EndTime)
+		if err != nil {
+			return nil, fmt.Errorf("invalid end_time %q: must be HH:MM", inp.EndTime)
+		}
+
+		schedules = append(schedules, domain.TripSchedule{
+			TripID:        tripID,
+			DayNumber:     inp.DayNumber,
+			SequenceOrder: inp.SequenceOrder,
+			PlaceName:     inp.PlaceName,
+			PlaceID:       inp.PlaceID,
+			Latitude:      inp.Latitude,
+			Longitude:     inp.Longitude,
+			StartTime:     startTime,
+			EndTime:       endTime,
+			Type:          inp.Type,
+		})
+	}
+
+	if err := s.repo.ReplaceSchedulesByTripID(ctx, tripID, schedules); err != nil {
 		return nil, err
 	}
 

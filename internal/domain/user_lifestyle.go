@@ -29,6 +29,7 @@ type UserLifestyleRepository interface {
 	GetByID(ctx context.Context, lifestyleID uint) (*UserLifestyle, error)
 	GetByUserAndRoom(ctx context.Context, userID, roomID uint) (*UserLifestyle, error)
 	GetByRoomID(ctx context.Context, roomID uint) ([]UserLifestyle, error)
+	DeleteByUserAndRoom(ctx context.Context, userID, roomID uint) error
 	GetTripByRoomID(ctx context.Context, roomID uint) (*Trips, error)
 	UpdateStructuredLifestyle(ctx context.Context, lifestyleID uint, structuredLifestyle string) error
 	Update(ctx context.Context, lifestyle *UserLifestyle) error
