@@ -54,13 +54,20 @@ func (s *userLifestyleService) AnalyzeLifestyle(ctx context.Context, lifestyleID
 		voyagePriorities = []string{}
 	}
 
+	var foodVibes []string
+	if err := json.Unmarshal([]byte(lifestyle.FoodVibes), &foodVibes); err != nil || foodVibes == nil {
+		foodVibes = []string{}
+	}
+
 	log.Printf("destination: %s", trip.DestinationName)
 
 	places, structuredJSON, err := s.recommendationClient.Recommend(ctx, domain.RecommendationRequest{
-		AttractionTypes: voyagePriorities,
-		Destination:     trip.DestinationName,
-		LifestyleText:   lifestyle.AdditionalNotes,
-		LifestyleTypes:  travelVibes,
+		DestinationName:  trip.DestinationName,
+		DestinationID:    trip.DestinationID,
+		TravelVibes:      travelVibes,
+		VoyagePriorities: voyagePriorities,
+		FoodVibes:        foodVibes,
+		AdditionalNotes:  lifestyle.AdditionalNotes,
 	})
 	if err != nil {
 		return nil, err

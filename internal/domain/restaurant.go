@@ -71,6 +71,7 @@ type RestaurantRepository interface {
 	GetByName(ctx context.Context, name string) ([]*Restaurant, error)
 	List(ctx context.Context, filter RestaurantFilter) ([]*Restaurant, int64, error)
 	GetFoodTypes(ctx context.Context) ([]*FoodType, error)
+	ListNearbyByFoodTypes(ctx context.Context, provinceID string, foodTypes []string, limit int) ([]*Restaurant, error)
 }
 
 // ========================

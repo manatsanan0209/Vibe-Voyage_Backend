@@ -36,10 +36,12 @@ type UserLifestyleRepository interface {
 }
 
 type RecommendationRequest struct {
-	AttractionTypes []string
-	Destination     string
-	LifestyleText   string
-	LifestyleTypes  []string
+	DestinationName  string
+	DestinationID    string
+	TravelVibes      []string
+	VoyagePriorities []string
+	FoodVibes        []string
+	AdditionalNotes  string
 }
 
 type RecommendationClient interface {

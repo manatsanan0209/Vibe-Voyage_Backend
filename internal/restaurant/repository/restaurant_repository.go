@@ -95,3 +95,41 @@ func (r *pgRestaurantRepository) GetFoodTypes(ctx context.Context) ([]*domain.Fo
 	}
 	return foodTypes, nil
 }
+
+func (r *pgRestaurantRepository) ListNearbyByFoodTypes(
+	ctx context.Context,
+	provinceID string,
+	foodTypes []string,
+	limit int,
+) ([]*domain.Restaurant, error) {
+	var restaurants []*domain.Restaurant
+
+	query := r.db.WithContext(ctx).Model(&domain.Restaurant{})
+
+	if provinceID != "" {
+		query = query.Where("province_id = ?", provinceID)
+	}
+	query = query.Where("latitude <> 0 AND longitude <> 0")
+
+	if len(foodTypes) > 0 {
+		typeQuery := r.db.Session(&gorm.Session{NewDB: true})
+		for i, t := range foodTypes {
+			like := "%" + t + "%"
+			if i == 0 {
+				typeQuery = typeQuery.Where("food_types ILIKE ?", like)
+			} else {
+				typeQuery = typeQuery.Or("food_types ILIKE ?", like)
+			}
+		}
+		query = query.Where(typeQuery)
+	}
+
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	if err := query.Find(&restaurants).Error; err != nil {
+		return nil, err
+	}
+	return restaurants, nil
+}
