@@ -22,7 +22,11 @@ import (
 	authPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth"
 	healthPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/health"
 	hotelPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/hotel"
+	notificationPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/notification"
+	notificationRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/notification/repository"
 	placePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place"
+	settingsPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/settings"
+	settingsRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/settings/repository"
 	attractionRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction/repository"
 	restaurantPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant"
 	restaurantRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant/repository"
@@ -50,6 +54,8 @@ func Run() error {
 		&domain.RoomInviteCode{},
 		&domain.UserLifestyle{},
 		&domain.TripSchedule{},
+		&domain.UserSettings{},
+		&domain.Notification{},
 	)
 	if err != nil {
 		log.Fatal("Migration failed:", err)
@@ -77,8 +83,13 @@ func Run() error {
 	lifestyleRepository := userLifestyleRepo.NewUserLifestyleRepository(gormDB)
 	recommendationClient := userLifestyleClient.NewHTTPRecommendationClient()
 	lifestyleSvc := userLifestyleService.NewUserLifestyleService(lifestyleRepository, recommendationClient)
-	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc)
-	tripSvc := tripService.NewTripService(tripRepository, restaurantRepository, attractionRepository, lifestyleSvc, roomSvc)
+
+	settingsRepository := settingsRepo.NewUserSettingsRepository(gormDB)
+	notifRepository := notificationRepo.NewNotificationRepository(gormDB)
+	notifSvc := notificationPkg.SetupService(notifRepository, settingsRepository)
+
+	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc, notifSvc)
+	tripSvc := tripService.NewTripService(tripRepository, restaurantRepository, attractionRepository, lifestyleSvc, roomSvc, notifSvc)
 
 	healthPkg.RegisterRoutes(app)
 	userPkg.Setup(app, svc)
@@ -91,6 +102,8 @@ func Run() error {
 	tripPkg.Setup(app, tripSvc)
 	userLifestylePkg.Setup(app, lifestyleSvc)
 	roomPkg.Setup(app, roomSvc)
+	settingsPkg.SetupWithRepo(app, settingsRepository)
+	notificationPkg.SetupHandler(app, notifSvc)
 
 	return app.Listen(":8080")
 }

@@ -70,12 +70,12 @@ func (s *roomService) AddRoomLifestyle(ctx context.Context, roomID, userID uint,
 		return nil, err
 	}
 
-	s.enqueueLifestyleAnalyze(lifestyle.LifestyleID)
+	s.enqueueLifestyleAnalyze(lifestyle.LifestyleID, userID)
 
 	return lifestyle, nil
 }
 
-func (s *roomService) enqueueLifestyleAnalyze(lifestyleID uint) {
+func (s *roomService) enqueueLifestyleAnalyze(lifestyleID, userID uint) {
 	if s.userLifestyleSvc == nil {
 		return
 	}
@@ -98,6 +98,10 @@ func (s *roomService) enqueueLifestyleAnalyze(lifestyleID uint) {
 		}
 
 		log.Printf("[RoomLifestyle] async analyze completed (lifestyle_id=%d)", lifestyleID)
+
+		if err := s.notifSvc.Notify(context.Background(), userID, domain.NotifTypeLifestyleAnalyzed, "Lifestyle analysis complete", "Your lifestyle analysis has been completed.", nil, nil); err != nil {
+			log.Printf("[Notification] lifestyle_analyzed failed (user_id=%d): %v", userID, err)
+		}
 	}()
 }
 
