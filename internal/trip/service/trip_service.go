@@ -18,6 +18,7 @@ type tripService struct {
 	attractionRepo   domain.AttractionRepository
 	lifestyleSvc     domain.UserLifestyleService
 	roomSvc          domain.RoomService
+	notifSvc         domain.NotificationService
 	analyzeSemaphore chan struct{}
 	analyzeTimeout   time.Duration
 }
@@ -28,6 +29,7 @@ func NewTripService(
 	attractionRepo domain.AttractionRepository,
 	lifestyleSvc domain.UserLifestyleService,
 	roomSvc domain.RoomService,
+	notifSvc domain.NotificationService,
 ) domain.TripService {
 	return &tripService{
 		repo:             repo,
@@ -35,6 +37,7 @@ func NewTripService(
 		attractionRepo:   attractionRepo,
 		lifestyleSvc:     lifestyleSvc,
 		roomSvc:          roomSvc,
+		notifSvc:         notifSvc,
 		analyzeSemaphore: make(chan struct{}, 5),
 		analyzeTimeout:   45 * time.Second,
 	}
@@ -188,6 +191,7 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 	s.enqueueAnalyzeAndSaveSuggestions(
 		result.Lifestyle.LifestyleID,
 		result.Trip.TripID,
+		userID,
 		result.Trip.StartDate,
 		result.Trip.EndDate,
 		input.FoodVibes,
@@ -198,7 +202,7 @@ func (s *tripService) CreateTrip(ctx context.Context, userID uint, input domain.
 }
 
 func (s *tripService) enqueueAnalyzeAndSaveSuggestions(
-	lifestyleID, tripID uint,
+	lifestyleID, tripID, userID uint,
 	startDate, endDate time.Time,
 	foodVibes []string,
 	destinationID string,
@@ -256,6 +260,11 @@ func (s *tripService) enqueueAnalyzeAndSaveSuggestions(
 		}
 
 		log.Printf("[CreateTrip] async suggestions saved (trip_id=%d, lifestyle_id=%d, attractions=%d, meals=%d)", tripID, lifestyleID, len(scheduled), len(restaurants))
+
+		refType := "trip"
+		if err := s.notifSvc.Notify(context.Background(), userID, domain.NotifTypeTripCreated, "Trip is ready!", "Your trip schedule has been created.", &tripID, &refType); err != nil {
+			log.Printf("[Notification] trip_created failed (user_id=%d): %v", userID, err)
+		}
 	}()
 }
 
@@ -515,6 +524,26 @@ func (s *tripService) ReplaceTripSchedule(ctx context.Context, userID, tripID ui
 	if err := s.repo.ReplaceSchedulesByTripID(ctx, tripID, schedules); err != nil {
 		return nil, err
 	}
+
+	go func() {
+		trip, err := s.repo.GetByID(context.Background(), tripID)
+		if err != nil {
+			return
+		}
+		members, err := s.roomSvc.GetMembersByRoomID(context.Background(), trip.RoomID)
+		if err != nil {
+			return
+		}
+		refType := "trip"
+		for _, m := range members {
+			if m.UserID == userID {
+				continue
+			}
+			if err := s.notifSvc.Notify(context.Background(), m.UserID, domain.NotifTypeScheduleUpdated, "Schedule updated", "The trip schedule has been updated.", &tripID, &refType); err != nil {
+				log.Printf("[Notification] schedule_updated failed (user_id=%d): %v", m.UserID, err)
+			}
+		}
+	}()
 
 	return schedules, nil
 }

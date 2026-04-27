@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 )
@@ -43,7 +44,12 @@ func (s *roomService) DeleteMember(ctx context.Context, roomID, requesterUserID,
 		return err
 	}
 
-	return s.memberRepo.DeleteMember(ctx, roomMemberID)
+	if err := s.memberRepo.DeleteMember(ctx, roomMemberID); err != nil {
+		return err
+	}
+
+	go s.notifyMembers(members, target.UserID, roomID, domain.NotifTypeMemberLeft, "Member left", "A member has left the room.")
+	return nil
 }
 
 func (s *roomService) LeaveRoom(ctx context.Context, roomID, userID uint) error {
@@ -76,20 +82,41 @@ func (s *roomService) LeaveRoom(ctx context.Context, roomID, userID uint) error 
 		return err
 	}
 
-	return s.memberRepo.DeleteMember(ctx, myMemberID)
+	if err := s.memberRepo.DeleteMember(ctx, myMemberID); err != nil {
+		return err
+	}
+
+	go s.notifyMembers(members, userID, roomID, domain.NotifTypeMemberLeft, "Member left", "A member has left the room.")
+	return nil
 }
 
 func (s *roomService) AddMember(ctx context.Context, roomID, userID uint) (*domain.RoomMember, error) {
-	return s.addMemberWithRole(ctx, roomID, userID, domain.RoleMember)
-}
-
-func (s *roomService) addMemberWithRole(ctx context.Context, roomID, userID uint, role int) (*domain.RoomMember, error) {
-	exists, err := s.memberRepo.ExistsByRoomAndUser(ctx, roomID, userID)
+	added, err := s.addMemberWithRole(ctx, roomID, userID, domain.RoleMember)
 	if err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, errors.New("user is already a member of this room")
+
+	// notify the added user directly
+	go func() {
+		refType := "room"
+		if err := s.notifSvc.Notify(context.Background(), userID, domain.NotifTypeRoomInvite, "You were added to a room", "You have been added to a room.", &roomID, &refType); err != nil {
+			log.Printf("[Notification] room_invite failed (user_id=%d): %v", userID, err)
+		}
+	}()
+
+	return added, nil
+}
+
+func (s *roomService) addMemberWithRole(ctx context.Context, roomID, userID uint, role int) (*domain.RoomMember, error) {
+	existingMembers, err := s.memberRepo.GetByRoomID(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, m := range existingMembers {
+		if m.UserID == userID {
+			return nil, errors.New("user is already a member of this room")
+		}
 	}
 
 	member := &domain.RoomMember{
@@ -97,5 +124,24 @@ func (s *roomService) addMemberWithRole(ctx context.Context, roomID, userID uint
 		UserID: userID,
 		Role:   role,
 	}
-	return s.memberRepo.AddMember(ctx, member)
+	added, err := s.memberRepo.AddMember(ctx, member)
+	if err != nil {
+		return nil, err
+	}
+
+	go s.notifyMembers(existingMembers, userID, roomID, domain.NotifTypeMemberJoined, "New member joined", "A new member has joined the room.")
+	return added, nil
+}
+
+// notifyMembers sends a notification to all members except excludeUserID.
+func (s *roomService) notifyMembers(members []domain.RoomMember, excludeUserID, roomID uint, notifType, title, message string) {
+	refType := "room"
+	for _, m := range members {
+		if m.UserID == excludeUserID {
+			continue
+		}
+		if err := s.notifSvc.Notify(context.Background(), m.UserID, notifType, title, message, &roomID, &refType); err != nil {
+			log.Printf("[Notification] %s failed (user_id=%d): %v", notifType, m.UserID, err)
+		}
+	}
 }

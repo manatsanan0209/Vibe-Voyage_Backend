@@ -12,16 +12,18 @@ type roomService struct {
 	inviteRepo       domain.RoomInviteCodeRepository
 	lifestyleRepo    domain.UserLifestyleRepository
 	userLifestyleSvc domain.UserLifestyleService
+	notifSvc         domain.NotificationService
 	analyzeSemaphore chan struct{}
 	analyzeTimeout   time.Duration
 }
 
-func NewRoomService(memberRepo domain.RoomRepository, inviteRepo domain.RoomInviteCodeRepository, lifestyleRepo domain.UserLifestyleRepository, userLifestyleSvc domain.UserLifestyleService) domain.RoomService {
+func NewRoomService(memberRepo domain.RoomRepository, inviteRepo domain.RoomInviteCodeRepository, lifestyleRepo domain.UserLifestyleRepository, userLifestyleSvc domain.UserLifestyleService, notifSvc domain.NotificationService) domain.RoomService {
 	return &roomService{
 		memberRepo:       memberRepo,
 		inviteRepo:       inviteRepo,
 		lifestyleRepo:    lifestyleRepo,
 		userLifestyleSvc: userLifestyleSvc,
+		notifSvc:         notifSvc,
 		analyzeSemaphore: make(chan struct{}, 5),
 		analyzeTimeout:   45 * time.Second,
 	}
