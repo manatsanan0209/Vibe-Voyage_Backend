@@ -177,14 +177,54 @@ func (r *tripRepository) CreateSchedules(ctx context.Context, schedules []domain
 
 func (r *tripRepository) ReplaceSchedulesByTripID(ctx context.Context, tripID uint, schedules []domain.TripSchedule) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("trip_id = ?", tripID).Delete(&domain.TripSchedule{}).Error; err != nil {
+		var existingIDs []uint
+		if err := tx.Model(&domain.TripSchedule{}).
+			Where("trip_id = ?", tripID).
+			Pluck("trip_schedule_id", &existingIDs).Error; err != nil {
 			return err
 		}
 
-		if len(schedules) == 0 {
-			return nil
+		incomingIDs := map[uint]bool{}
+		for _, s := range schedules {
+			if s.TripScheduleID > 0 {
+				incomingIDs[s.TripScheduleID] = true
+			}
 		}
 
-		return tx.Create(&schedules).Error
+		toDelete := []uint{}
+		for _, id := range existingIDs {
+			if !incomingIDs[id] {
+				toDelete = append(toDelete, id)
+			}
+		}
+		if len(toDelete) > 0 {
+			if err := tx.Unscoped().Delete(&domain.TripSchedule{}, toDelete).Error; err != nil {
+				return err
+			}
+		}
+
+		for i := range schedules {
+			if schedules[i].TripScheduleID > 0 {
+				if err := tx.Model(&schedules[i]).Updates(map[string]interface{}{
+					"day_number":     schedules[i].DayNumber,
+					"sequence_order": schedules[i].SequenceOrder,
+					"place_name":     schedules[i].PlaceName,
+					"place_id":       schedules[i].PlaceID,
+					"latitude":       schedules[i].Latitude,
+					"longitude":      schedules[i].Longitude,
+					"start_time":     schedules[i].StartTime,
+					"end_time":       schedules[i].EndTime,
+					"type":           schedules[i].Type,
+				}).Error; err != nil {
+					return err
+				}
+			} else {
+				if err := tx.Create(&schedules[i]).Error; err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
 	})
 }

@@ -241,13 +241,14 @@ func (s *tripService) enqueueAnalyzeAndSaveSuggestions(
 			return
 		}
 
-		scheduled := schedulePlaces(aiSuggestions, startDate, endDate)
+		scheduled, unscheduled := schedulePlaces(aiSuggestions, startDate, endDate)
 		for i := range scheduled {
 			scheduled[i].SequenceOrder = shiftAttractionSeq(scheduled[i].SequenceOrder)
 		}
 
 		restaurants := s.buildMealSchedules(asyncCtx, tripID, scheduled, foodVibes, destinationID)
 		allSchedules := append(scheduled, restaurants...)
+		allSchedules = append(allSchedules, unscheduled...)
 
 		if err := s.repo.CreateSchedules(asyncCtx, allSchedules); err != nil {
 			log.Printf("[CreateTrip] async save suggestions failed (trip_id=%d, lifestyle_id=%d): %v", tripID, lifestyleID, err)
@@ -497,16 +498,17 @@ func (s *tripService) ReplaceTripSchedule(ctx context.Context, userID, tripID ui
 		}
 
 		schedules = append(schedules, domain.TripSchedule{
-			TripID:        tripID,
-			DayNumber:     inp.DayNumber,
-			SequenceOrder: inp.SequenceOrder,
-			PlaceName:     inp.PlaceName,
-			PlaceID:       inp.PlaceID,
-			Latitude:      inp.Latitude,
-			Longitude:     inp.Longitude,
-			StartTime:     startTime,
-			EndTime:       endTime,
-			Type:          inp.Type,
+			TripScheduleID: inp.TripScheduleID,
+			TripID:         tripID,
+			DayNumber:      inp.DayNumber,
+			SequenceOrder:  inp.SequenceOrder,
+			PlaceName:      inp.PlaceName,
+			PlaceID:        inp.PlaceID,
+			Latitude:       inp.Latitude,
+			Longitude:      inp.Longitude,
+			StartTime:      startTime,
+			EndTime:        endTime,
+			Type:           inp.Type,
 		})
 	}
 
@@ -569,9 +571,9 @@ func nearestNeighborOrder(places []domain.TripSchedule) []domain.TripSchedule {
 // schedulePlaces assigns DayNumber and SequenceOrder to places by:
 // 1. Ordering them with nearest-neighbor (geographically close places together)
 // 2. Distributing evenly across the trip days (max 4 places per day)
-func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) []domain.TripSchedule {
+func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) (scheduled, unscheduled []domain.TripSchedule) {
 	if len(places) == 0 {
-		return places
+		return places, nil
 	}
 
 	const maxPlacesPerDay = 4
@@ -583,9 +585,9 @@ func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) 
 
 	ordered := nearestNeighborOrder(places)
 
-	// Truncate to at most 4 places per day
 	maxPlaces := totalDays * maxPlacesPerDay
 	if len(ordered) > maxPlaces {
+		unscheduled = ordered[maxPlaces:]
 		ordered = ordered[:maxPlaces]
 	}
 
@@ -608,5 +610,5 @@ func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) 
 		ordered[i].SequenceOrder = seq
 	}
 
-	return ordered
+	return ordered, unscheduled
 }

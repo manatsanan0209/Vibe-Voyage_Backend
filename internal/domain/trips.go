@@ -67,16 +67,17 @@ type GetTripScheduleResult struct {
 }
 
 type CreateTripScheduleInput struct {
-	TripID        uint
-	DayNumber     int
-	SequenceOrder int
-	PlaceName     string
-	PlaceID       string
-	Latitude      float64
-	Longitude     float64
-	StartTime     string
-	EndTime       string
-	Type          string
+	TripScheduleID uint
+	TripID         uint
+	DayNumber      int
+	SequenceOrder  int
+	PlaceName      string
+	PlaceID        string
+	Latitude       float64
+	Longitude      float64
+	StartTime      string
+	EndTime        string
+	Type           string
 }
 
 type RecommendedPlace struct {
