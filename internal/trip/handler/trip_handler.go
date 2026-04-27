@@ -341,16 +341,17 @@ func (h *tripHandler) ReplaceTripSchedule(c *fiber.Ctx) error {
 	inputs := make([]domain.CreateTripScheduleInput, len(req.Items))
 	for i, item := range req.Items {
 		inputs[i] = domain.CreateTripScheduleInput{
-			TripID:        uint(tripID),
-			DayNumber:     item.DayNumber,
-			SequenceOrder: item.SequenceOrder,
-			PlaceName:     item.PlaceName,
-			PlaceID:       item.PlaceID,
-			Latitude:      item.Latitude,
-			Longitude:     item.Longitude,
-			StartTime:     item.StartTime,
-			EndTime:       item.EndTime,
-			Type:          item.Type,
+			TripScheduleID: item.TripScheduleID,
+			TripID:         uint(tripID),
+			DayNumber:      item.DayNumber,
+			SequenceOrder:  item.SequenceOrder,
+			PlaceName:      item.PlaceName,
+			PlaceID:        item.PlaceID,
+			Latitude:       item.Latitude,
+			Longitude:      item.Longitude,
+			StartTime:      item.StartTime,
+			EndTime:        item.EndTime,
+			Type:           item.Type,
 		}
 	}
 

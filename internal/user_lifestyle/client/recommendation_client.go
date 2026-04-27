@@ -25,10 +25,12 @@ func NewHTTPRecommendationClient() domain.RecommendationClient {
 
 func (c *httpRecommendationClient) Recommend(ctx context.Context, req domain.RecommendationRequest) ([]domain.RecommendedPlace, string, error) {
 	payload := map[string]interface{}{
-		"attraction_types": req.AttractionTypes,
-		"destination":      req.Destination,
-		"lifestyle_text":   req.LifestyleText,
-		"lifestyle_types":  req.LifestyleTypes,
+		"destination_name":  req.DestinationName,
+		"destination_id":    req.DestinationID,
+		"travel_vibes":      req.TravelVibes,
+		"voyage_priorities": req.VoyagePriorities,
+		"food_vibes":        req.FoodVibes,
+		"additional_notes":  req.AdditionalNotes,
 	}
 
 	payloadBytes, err := json.Marshal(payload)

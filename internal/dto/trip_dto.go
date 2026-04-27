@@ -49,15 +49,16 @@ type GetTripScheduleResponseDTO struct {
 }
 
 type CreateTripScheduleItemRequestDTO struct {
-	DayNumber     int     `json:"day_number"`
-	SequenceOrder int     `json:"sequence_order"`
-	PlaceName     string  `json:"place_name"`
-	PlaceID       string  `json:"place_id"`
-	Latitude      float64 `json:"latitude"`
-	Longitude     float64 `json:"longitude"`
-	StartTime     string  `json:"start_time"`
-	EndTime       string  `json:"end_time"`
-	Type          string  `json:"type"`
+	TripScheduleID uint    `json:"trip_schedule_id"`
+	DayNumber      int     `json:"day_number"`
+	SequenceOrder  int     `json:"sequence_order"`
+	PlaceName      string  `json:"place_name"`
+	PlaceID        string  `json:"place_id"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	StartTime      string  `json:"start_time"`
+	EndTime        string  `json:"end_time"`
+	Type           string  `json:"type"`
 }
 
 type CreateTripScheduleRequestDTO struct {

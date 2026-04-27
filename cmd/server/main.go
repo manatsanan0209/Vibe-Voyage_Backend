@@ -23,7 +23,9 @@ import (
 	healthPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/health"
 	hotelPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/hotel"
 	placePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place"
+	attractionRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction/repository"
 	restaurantPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant"
+	restaurantRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant/repository"
 	roomPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room"
 	roomRepoPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/repository"
 	roomServicePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/service"
@@ -68,13 +70,15 @@ func Run() error {
 	repo := userRepo.NewUserRepository(gormDB)
 	svc := userService.NewUserService(repo)
 	tripRepository := tripRepo.NewTripRepository(gormDB)
+	restaurantRepository := restaurantRepo.NewRestaurantRepository(gormDB)
+	attractionRepository := attractionRepo.NewAttractionRepository(gormDB)
 	roomRepository := roomRepoPkg.NewRoomRepository(gormDB)
 	roomInviteRepository := roomRepoPkg.NewRoomInviteCodeRepository(gormDB)
 	lifestyleRepository := userLifestyleRepo.NewUserLifestyleRepository(gormDB)
 	recommendationClient := userLifestyleClient.NewHTTPRecommendationClient()
 	lifestyleSvc := userLifestyleService.NewUserLifestyleService(lifestyleRepository, recommendationClient)
 	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc)
-	tripSvc := tripService.NewTripService(tripRepository, lifestyleSvc, roomSvc)
+	tripSvc := tripService.NewTripService(tripRepository, restaurantRepository, attractionRepository, lifestyleSvc, roomSvc)
 
 	healthPkg.RegisterRoutes(app)
 	userPkg.Setup(app, svc)
