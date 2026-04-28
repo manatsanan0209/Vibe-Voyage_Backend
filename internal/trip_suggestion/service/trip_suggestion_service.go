@@ -61,3 +61,13 @@ func (s *tripSuggestionService) GetBookmarks(ctx context.Context, userID uint) (
 func (s *tripSuggestionService) UseAsTemplate(ctx context.Context, publishedTripID, userID uint, input domain.UseAsTemplateInput) (*domain.CreateTripResult, error) {
 	return s.repo.UseAsTemplate(ctx, publishedTripID, userID, input)
 }
+
+func (s *tripSuggestionService) GetMyPosts(ctx context.Context, userID uint, page, limit int) ([]domain.PublishedTripWithMeta, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.repo.GetMyPublishedTrips(ctx, userID, page, limit)
+}
