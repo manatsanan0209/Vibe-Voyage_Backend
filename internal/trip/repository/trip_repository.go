@@ -79,6 +79,13 @@ func (r *tripRepository) GetSchedulesByTripID(ctx context.Context, tripID uint) 
 	return schedules, nil
 }
 
+func (r *tripRepository) UpdateGroupStructuredLifestyle(ctx context.Context, tripID uint, snapshot string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.Trips{}).
+		Where("trip_id = ?", tripID).
+		Update("group_structured_lifestyle", snapshot).Error
+}
+
 func (r *tripRepository) CreateTripBundle(
 	ctx context.Context,
 	userID uint,

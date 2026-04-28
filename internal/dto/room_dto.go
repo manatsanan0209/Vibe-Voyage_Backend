@@ -18,6 +18,7 @@ type RoomMemberLifestyleSubmissionResponseDTO struct {
 	Role                  int    `json:"role"`
 	RoleName              string `json:"role_name"`
 	HasSubmittedLifestyle bool   `json:"has_submitted_lifestyle"`
+	HasAnalyzedLifestyle  bool   `json:"has_analyzed_lifestyle"`
 	LifestyleID           *uint  `json:"lifestyle_id"`
 }
 

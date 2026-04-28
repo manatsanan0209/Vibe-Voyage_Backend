@@ -66,6 +66,38 @@ type GetTripScheduleResult struct {
 	Days        []DaySchedule
 }
 
+type RescheduleTripMemberScore struct {
+	UserID         uint    `json:"user_id"`
+	Username       string  `json:"username"`
+	Score          float64 `json:"score"`
+	EffectiveScore float64 `json:"effective_score"`
+	TimesServed    int     `json:"times_served"`
+	DeferredCount  int     `json:"deferred_count"`
+}
+
+type RescheduleTripResult struct {
+	TripID           uint                        `json:"trip_id"`
+	ScheduledCount   int                         `json:"scheduled_count"`
+	SuggestionsCount int                         `json:"suggestions_count"`
+	RoundCount       int                         `json:"round_count"`
+	SelectedPlaceIDs []string                    `json:"selected_place_ids"`
+	Scoreboard       []RescheduleTripMemberScore `json:"scoreboard"`
+}
+
+type RescheduleNotReadyMember struct {
+	UserID      uint   `json:"user_id"`
+	Username    string `json:"username"`
+	LifestyleID *uint  `json:"lifestyle_id,omitempty"`
+}
+
+type RescheduleAnalysisNotReadyError struct {
+	NotReadyMembers []RescheduleNotReadyMember
+}
+
+func (e *RescheduleAnalysisNotReadyError) Error() string {
+	return "analysis_incomplete"
+}
+
 type CreateTripScheduleInput struct {
 	TripScheduleID uint
 	TripID         uint
@@ -94,6 +126,7 @@ type TripRepository interface {
 	IsUserInTripRoom(ctx context.Context, userID, tripID uint) (bool, error)
 	GetUserRoleInTripRoom(ctx context.Context, userID, tripID uint) (int, bool, error)
 	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
+	UpdateGroupStructuredLifestyle(ctx context.Context, tripID uint, snapshot string) error
 	CreateTripBundle(
 		ctx context.Context,
 		userID uint,
@@ -111,6 +144,7 @@ type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
 	JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*JoinTripByInviteCodeResult, error)
 	GetTripSchedule(ctx context.Context, userID, tripID uint) (*GetTripScheduleResult, error)
+	RescheduleTrip(ctx context.Context, userID, tripID uint) (*RescheduleTripResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 	ReplaceTripSchedule(ctx context.Context, userID, tripID uint, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 }
