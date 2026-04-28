@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
@@ -305,6 +306,22 @@ func (r *tripSuggestionRepository) UseAsTemplate(ctx context.Context, publishedT
 		Where("published_trip_id = ?", publishedTripID).
 		First(&pt).Error; err != nil {
 		return nil, errors.New("published trip not found")
+	}
+
+	var memberCount int64
+	r.db.WithContext(ctx).
+		Table("room_members rm").
+		Joins("JOIN trips t ON t.room_id = rm.room_id AND t.deleted_at IS NULL").
+		Where("rm.user_id = ? AND rm.deleted_at IS NULL AND t.trip_id = ?", userID, pt.TripID).
+		Count(&memberCount)
+	if memberCount > 0 {
+		return nil, errors.New("cannot use own trip as template")
+	}
+
+	templateDays := int(pt.Trip.EndDate.Sub(pt.Trip.StartDate).Hours() / 24)
+	newDays := int(input.EndDate.Sub(input.StartDate).Hours() / 24)
+	if newDays < templateDays {
+		return nil, fmt.Errorf("trip duration must be at least %d days to match the template", templateDays)
 	}
 
 	var schedules []domain.TripSchedule

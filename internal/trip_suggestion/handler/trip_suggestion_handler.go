@@ -338,6 +338,13 @@ func (h *tripSuggestionHandler) UseAsTemplate(c *fiber.Ctx) error {
 
 	result, err := h.svc.UseAsTemplate(c.Context(), uint(publishedTripID), userID, input)
 	if err != nil {
+		if err.Error() == "cannot use own trip as template" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "you cannot use your own trip as a template",
+			})
+		}
 		return c.Status(400).JSON(dto.APIResponse[any]{
 			Status:  400,
 			Message: "failed to create trip from template",
