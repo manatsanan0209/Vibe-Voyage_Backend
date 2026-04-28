@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -34,7 +35,7 @@ func (h *userLifestyleHandler) AnalyzeLifestyle(c *fiber.Ctx) error {
 
 	places, err := h.svc.AnalyzeLifestyle(c.Context(), uint(lifestyleID))
 	if err != nil {
-		if err.Error() == "lifestyle not found" {
+		if errors.Is(err, domain.ErrLifestyleNotFound) {
 			return c.Status(404).JSON(dto.APIResponse[any]{
 				Status:  404,
 				Message: "not found",

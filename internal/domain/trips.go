@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -16,10 +18,17 @@ type Trips struct {
 	StartDate           time.Time      `json:"start_date" gorm:"not null"`
 	EndDate             time.Time      `json:"end_date" gorm:"not null"`
 	StructuredLifeStyle string         `json:"group_structured_lifestyle"`
+	Version             int            `json:"version" gorm:"not null;default:0"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
 	DeletedAt           gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
+
+var (
+	ErrForbidden                        = errors.New("forbidden")
+	ErrLifestyleNotFound                = errors.New("lifestyle not found")
+	ErrRescheduleConcurrentModification = errors.New("reschedule conflict: concurrent modification detected")
+)
 
 type PreferredDestination struct {
 	DestinationName string  `json:"destination_name"`
@@ -127,6 +136,7 @@ type TripRepository interface {
 	GetUserRoleInTripRoom(ctx context.Context, userID, tripID uint) (int, bool, error)
 	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
 	UpdateGroupStructuredLifestyle(ctx context.Context, tripID uint, snapshot string) error
+	GetAttractionsByNames(ctx context.Context, names []string) (map[string][]Attraction, error)
 	CreateTripBundle(
 		ctx context.Context,
 		userID uint,
@@ -138,6 +148,7 @@ type TripRepository interface {
 	) (*CreateTripResult, error)
 	CreateSchedules(ctx context.Context, schedules []TripSchedule) error
 	ReplaceSchedulesByTripID(ctx context.Context, tripID uint, schedules []TripSchedule) error
+	ReplaceScheduleAndSnapshot(ctx context.Context, tripID uint, schedules []TripSchedule, snapshot string) error
 }
 
 type TripService interface {
@@ -147,4 +158,25 @@ type TripService interface {
 	RescheduleTrip(ctx context.Context, userID, tripID uint) (*RescheduleTripResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 	ReplaceTripSchedule(ctx context.Context, userID, tripID uint, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
+}
+
+// IsStructuredLifestyleValid reports whether the raw JSON string is non-nil, valid JSON, and not trivially empty.
+func IsStructuredLifestyleValid(value *string) bool {
+	if value == nil {
+		return false
+	}
+
+	var payload interface{}
+	if json.Unmarshal([]byte(*value), &payload) != nil {
+		return false
+	}
+
+	switch v := payload.(type) {
+	case map[string]interface{}:
+		return len(v) > 0
+	case []interface{}:
+		return len(v) > 0
+	}
+
+	return true
 }

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 
@@ -25,7 +24,7 @@ func (s *userLifestyleService) GetLifestyle(ctx context.Context, userID, roomID 
 		return nil, err
 	}
 	if lifestyle == nil {
-		return nil, errors.New("lifestyle not found")
+		return nil, domain.ErrLifestyleNotFound
 	}
 	return lifestyle, nil
 }
@@ -36,7 +35,7 @@ func (s *userLifestyleService) AnalyzeLifestyle(ctx context.Context, lifestyleID
 		return nil, err
 	}
 	if lifestyle == nil {
-		return nil, errors.New("lifestyle not found")
+		return nil, domain.ErrLifestyleNotFound
 	}
 
 	trip, err := s.repo.GetTripByRoomID(ctx, lifestyle.RoomID)

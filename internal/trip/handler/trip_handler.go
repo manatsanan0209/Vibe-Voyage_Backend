@@ -66,7 +66,7 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 
 	result, err := h.svc.GetTripSchedule(c.Context(), userID, uint(tripID))
 	if err != nil {
-		if err.Error() == "forbidden" {
+		if errors.Is(err, domain.ErrForbidden) {
 			return c.Status(403).JSON(dto.APIResponse[any]{
 				Status:  403,
 				Message: "forbidden",
@@ -359,7 +359,7 @@ func (h *tripHandler) ReplaceTripSchedule(c *fiber.Ctx) error {
 
 	replaced, err := h.svc.ReplaceTripSchedule(c.Context(), userID, uint(tripID), inputs)
 	if err != nil {
-		if err.Error() == "forbidden" {
+		if errors.Is(err, domain.ErrForbidden) {
 			return c.Status(403).JSON(dto.APIResponse[any]{
 				Status:  403,
 				Message: "forbidden",
@@ -429,11 +429,18 @@ func (h *tripHandler) RescheduleTrip(c *fiber.Ctx) error {
 			})
 		}
 
-		if err.Error() == "forbidden" {
+		if errors.Is(err, domain.ErrForbidden) {
 			return c.Status(403).JSON(dto.APIResponse[any]{
 				Status:  403,
 				Message: "forbidden",
 				Error:   "only room owner can reschedule this trip",
+			})
+		}
+		if errors.Is(err, domain.ErrRescheduleConcurrentModification) {
+			return c.Status(409).JSON(dto.APIResponse[any]{
+				Status:  409,
+				Message: "reschedule conflict: another reschedule is currently in progress",
+				Error:   err.Error(),
 			})
 		}
 

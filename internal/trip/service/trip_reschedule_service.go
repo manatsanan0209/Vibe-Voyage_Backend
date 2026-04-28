@@ -59,10 +59,20 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 		return nil, err
 	}
 	if !exists || role != domain.RoleOwner {
-		return nil, errors.New("forbidden")
+		return nil, domain.ErrForbidden
 	}
 
+	releaseLock, locked := s.tryAcquireRescheduleLock(tripID)
+	if !locked {
+		return nil, domain.ErrRescheduleConcurrentModification
+	}
+	defer releaseLock()
+
 	trip, err := s.repo.GetByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	existingSchedules, err := s.repo.GetSchedulesByTripID(ctx, tripID)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +84,7 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 
 	states := make(map[uint]*memberRescheduleState)
 	notReadyMembers := make([]domain.RescheduleNotReadyMember, 0)
+	namesToResolve := make([]string, 0)
 	foodVibesSet := map[string]bool{}
 
 	for _, member := range members {
@@ -83,14 +94,19 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 
 		lifestyle, err := s.lifestyleSvc.GetLifestyle(ctx, member.UserID, trip.RoomID)
 		if err != nil {
-			if err.Error() == "lifestyle not found" {
+			if errors.Is(err, domain.ErrLifestyleNotFound) {
+				notReadyMembers = append(notReadyMembers, domain.RescheduleNotReadyMember{
+					UserID:      member.UserID,
+					Username:    member.User.Username,
+					LifestyleID: nil,
+				})
 				continue
 			}
 			return nil, err
 		}
 
 		lifestyleID := lifestyle.LifestyleID
-		if !isValidStructuredLifestyle(lifestyle.StructuredLifestyle) {
+		if !domain.IsStructuredLifestyleValid(lifestyle.StructuredLifestyle) {
 			notReadyMembers = append(notReadyMembers, domain.RescheduleNotReadyMember{
 				UserID:      member.UserID,
 				Username:    member.User.Username,
@@ -110,15 +126,10 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 		}
 
 		candidates = dedupeCandidatesByPlaceID(candidates)
-		resolved := make([]rankedCandidate, 0, len(candidates))
 		for _, candidate := range candidates {
 			if candidate.PlaceID == "" {
-				candidate.PlaceID = s.resolveAttractionID(ctx, candidate.Name, candidate.Latitude, candidate.Longitude)
+				namesToResolve = append(namesToResolve, candidate.Name)
 			}
-			if candidate.PlaceID == "" {
-				continue
-			}
-			resolved = append(resolved, candidate)
 		}
 
 		collectFoodVibes(foodVibesSet, lifestyle.FoodVibes)
@@ -126,8 +137,8 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 		states[member.UserID] = &memberRescheduleState{
 			UserID:            member.UserID,
 			Username:          member.User.Username,
-			Candidates:        resolved,
-			CategoryRank:      buildCategoryRank(resolved),
+			Candidates:        candidates,
+			CategoryRank:      map[string]int{},
 			LastSelectedRound: -1,
 		}
 	}
@@ -137,6 +148,29 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 			return notReadyMembers[i].UserID < notReadyMembers[j].UserID
 		})
 		return nil, &domain.RescheduleAnalysisNotReadyError{NotReadyMembers: notReadyMembers}
+	}
+
+	attractionsByName := map[string][]domain.Attraction{}
+	if len(namesToResolve) > 0 {
+		attractionsByName, err = s.repo.GetAttractionsByNames(ctx, namesToResolve)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, state := range states {
+		resolved := make([]rankedCandidate, 0, len(state.Candidates))
+		for _, candidate := range state.Candidates {
+			if candidate.PlaceID == "" {
+				candidate.PlaceID = resolveAttractionIDFromCandidates(candidate, attractionsByName[strings.ToLower(strings.TrimSpace(candidate.Name))])
+			}
+			if candidate.PlaceID == "" {
+				continue
+			}
+			resolved = append(resolved, candidate)
+		}
+		state.Candidates = resolved
+		state.CategoryRank = buildCategoryRank(resolved)
 	}
 
 	if len(states) == 0 {
@@ -177,9 +211,8 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 	allSchedules = append(allSchedules, restaurants...)
 	allSchedules = append(allSchedules, unscheduled...)
 
-	if err := s.repo.ReplaceSchedulesByTripID(ctx, tripID, allSchedules); err != nil {
-		return nil, err
-	}
+	preservedSuggestions := collectPreservedSuggestions(existingSchedules, allSchedules)
+	allSchedules = append(allSchedules, preservedSuggestions...)
 
 	scoreboard := buildScoreboard(states)
 	snapshotBytes, err := json.Marshal(fairnessRunSnapshot{
@@ -193,7 +226,7 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 		return nil, fmt.Errorf("failed to build reschedule snapshot: %w", err)
 	}
 
-	if err := s.repo.UpdateGroupStructuredLifestyle(ctx, tripID, string(snapshotBytes)); err != nil {
+	if err := s.repo.ReplaceScheduleAndSnapshot(ctx, tripID, allSchedules, string(snapshotBytes)); err != nil {
 		return nil, err
 	}
 
@@ -202,7 +235,7 @@ func (s *tripService) RescheduleTrip(ctx context.Context, userID, tripID uint) (
 	return &domain.RescheduleTripResult{
 		TripID:           tripID,
 		ScheduledCount:   len(scheduled) + len(restaurants),
-		SuggestionsCount: len(unscheduled),
+		SuggestionsCount: len(unscheduled) + len(preservedSuggestions),
 		RoundCount:       rounds,
 		SelectedPlaceIDs: selectedPlaceIDs,
 		Scoreboard:       scoreboard,
@@ -540,14 +573,6 @@ func getNumberValue(node map[string]interface{}, keys ...string) (float64, bool)
 	return 0, false
 }
 
-func isValidStructuredLifestyle(value *string) bool {
-	if value == nil {
-		return false
-	}
-	var payload interface{}
-	return json.Unmarshal([]byte(*value), &payload) == nil
-}
-
 func collectFoodVibes(out map[string]bool, raw string) {
 	if raw == "" {
 		return
@@ -562,6 +587,93 @@ func collectFoodVibes(out map[string]bool, raw string) {
 			out[normalized] = true
 		}
 	}
+}
+
+func (s *tripService) tryAcquireRescheduleLock(tripID uint) (func(), bool) {
+	lockValue, _ := s.rescheduleLocks.LoadOrStore(tripID, make(chan struct{}, 1))
+	lock := lockValue.(chan struct{})
+
+	select {
+	case lock <- struct{}{}:
+		return func() {
+			<-lock
+		}, true
+	default:
+		return nil, false
+	}
+}
+
+func resolveAttractionIDFromCandidates(candidate rankedCandidate, attractions []domain.Attraction) string {
+	if len(attractions) == 0 {
+		return ""
+	}
+
+	best := attractions[0]
+	minDist := haversine(candidate.Latitude, candidate.Longitude, best.Latitude, best.Longitude)
+
+	for _, attraction := range attractions[1:] {
+		distance := haversine(candidate.Latitude, candidate.Longitude, attraction.Latitude, attraction.Longitude)
+		if distance < minDist {
+			minDist = distance
+			best = attraction
+		}
+	}
+
+	return best.ID
+}
+
+func collectPreservedSuggestions(existingSchedules, regeneratedSchedules []domain.TripSchedule) []domain.TripSchedule {
+	keptPlaceIDs := make(map[string]bool, len(regeneratedSchedules))
+	for _, item := range regeneratedSchedules {
+		placeID := normalizeSchedulePlaceID(item.PlaceID)
+		if placeID == "" {
+			continue
+		}
+		keptPlaceIDs[placeID] = true
+	}
+
+	preserved := make([]domain.TripSchedule, 0)
+	preservedSeen := map[string]bool{}
+
+	for _, item := range existingSchedules {
+		if !shouldPreserveScheduleItem(item, keptPlaceIDs) {
+			continue
+		}
+
+		key := preserveDedupKey(item)
+		if preservedSeen[key] {
+			continue
+		}
+		preservedSeen[key] = true
+
+		item.TripScheduleID = 0
+		item.DayNumber = 0
+		item.SequenceOrder = 0
+		preserved = append(preserved, item)
+	}
+
+	return preserved
+}
+
+func shouldPreserveScheduleItem(item domain.TripSchedule, keptPlaceIDs map[string]bool) bool {
+	if strings.EqualFold(strings.TrimSpace(item.Type), "restaurant") {
+		return false
+	}
+
+	placeID := normalizeSchedulePlaceID(item.PlaceID)
+	if placeID == "" {
+		return false
+	}
+
+	return !keptPlaceIDs[placeID]
+}
+
+func normalizeSchedulePlaceID(placeID string) string {
+	return strings.ToLower(strings.TrimSpace(placeID))
+}
+
+func preserveDedupKey(item domain.TripSchedule) string {
+	return normalizeSchedulePlaceID(item.PlaceID) + "|" + strings.ToLower(strings.TrimSpace(item.Type))
 }
 
 func setToSortedSlice(items map[string]bool) []string {

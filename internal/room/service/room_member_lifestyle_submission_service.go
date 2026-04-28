@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 )
@@ -36,7 +35,7 @@ func (s *roomService) ListMemberLifestyleSubmissions(ctx context.Context, roomID
 		if hasSubmitted {
 			id := lifestyle.LifestyleID
 			submittedLifestyleID = &id
-			hasAnalyzed = isStructuredLifestyleReady(lifestyle.StructuredLifestyle)
+			hasAnalyzed = domain.IsStructuredLifestyleValid(lifestyle.StructuredLifestyle)
 		}
 
 		result = append(result, domain.MemberLifestyleSubmissionStatus{
@@ -52,13 +51,4 @@ func (s *roomService) ListMemberLifestyleSubmissions(ctx context.Context, roomID
 	}
 
 	return result, nil
-}
-
-func isStructuredLifestyleReady(value *string) bool {
-	if value == nil {
-		return false
-	}
-
-	var payload interface{}
-	return json.Unmarshal([]byte(*value), &payload) == nil
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	"gorm.io/gorm"
@@ -84,6 +85,59 @@ func (r *tripRepository) UpdateGroupStructuredLifestyle(ctx context.Context, tri
 		Model(&domain.Trips{}).
 		Where("trip_id = ?", tripID).
 		Update("group_structured_lifestyle", snapshot).Error
+}
+
+func (r *tripRepository) GetAttractionsByNames(ctx context.Context, names []string) (map[string][]domain.Attraction, error) {
+	normalizedNames := make([]string, 0, len(names))
+	for _, name := range names {
+		normalized := strings.ToLower(strings.TrimSpace(name))
+		if normalized == "" {
+			continue
+		}
+		exists := false
+		for _, existing := range normalizedNames {
+			if existing == normalized {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		normalizedNames = append(normalizedNames, normalized)
+	}
+
+	result := make(map[string][]domain.Attraction, len(normalizedNames))
+	if len(normalizedNames) == 0 {
+		return result, nil
+	}
+
+	query := r.db.WithContext(ctx).Model(&domain.Attraction{})
+	for idx, normalizedName := range normalizedNames {
+		like := "%" + normalizedName + "%"
+		if idx == 0 {
+			query = query.Where("LOWER(name_th) LIKE ? OR LOWER(name_en) LIKE ?", like, like)
+			continue
+		}
+		query = query.Or("LOWER(name_th) LIKE ? OR LOWER(name_en) LIKE ?", like, like)
+	}
+
+	attractions := make([]domain.Attraction, 0)
+	if err := query.Find(&attractions).Error; err != nil {
+		return nil, err
+	}
+
+	for _, attraction := range attractions {
+		nameTH := strings.ToLower(strings.TrimSpace(attraction.NameTH))
+		nameEN := strings.ToLower(strings.TrimSpace(attraction.NameEN))
+		for _, normalizedName := range normalizedNames {
+			if strings.Contains(nameTH, normalizedName) || strings.Contains(nameEN, normalizedName) {
+				result[normalizedName] = append(result[normalizedName], attraction)
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (r *tripRepository) CreateTripBundle(
@@ -233,5 +287,24 @@ func (r *tripRepository) ReplaceSchedulesByTripID(ctx context.Context, tripID ui
 		}
 
 		return nil
+	})
+}
+
+func (r *tripRepository) ReplaceScheduleAndSnapshot(ctx context.Context, tripID uint, schedules []domain.TripSchedule, snapshot string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("trip_id = ?", tripID).Delete(&domain.TripSchedule{}).Error; err != nil {
+			return err
+		}
+		if len(schedules) > 0 {
+			if err := tx.Create(&schedules).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&domain.Trips{}).
+			Where("trip_id = ?", tripID).
+			Updates(map[string]interface{}{
+				"group_structured_lifestyle": snapshot,
+				"version":                    gorm.Expr("version + 1"),
+			}).Error
 	})
 }
