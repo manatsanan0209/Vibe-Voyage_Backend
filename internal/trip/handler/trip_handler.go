@@ -11,11 +11,12 @@ import (
 )
 
 type tripHandler struct {
-	svc domain.TripService
+	svc           domain.TripService
+	suggestionSvc domain.TripSuggestionService
 }
 
-func NewTripHandler(svc domain.TripService) *tripHandler {
-	return &tripHandler{svc: svc}
+func NewTripHandler(svc domain.TripService, suggestionSvc domain.TripSuggestionService) *tripHandler {
+	return &tripHandler{svc: svc, suggestionSvc: suggestionSvc}
 }
 
 func (h *tripHandler) RegisterRoutes(app *fiber.App) {
@@ -26,6 +27,9 @@ func (h *tripHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/:tripID/schedule", h.GetTripSchedule)
 	api.Post("/:tripID/schedule", h.CreateTripSchedule)
 	api.Put("/:tripID/schedule", h.ReplaceTripSchedule)
+	api.Get("/:tripID/publish", h.GetPublishStatus)
+	api.Post("/:tripID/publish", h.PublishTrip)
+	api.Delete("/:tripID/publish", h.UnpublishTrip)
 }
 
 func toScheduleItemDTO(item domain.TripSchedule) dto.TripScheduleItemDTO {
@@ -102,6 +106,12 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 		EndDate:         result.Trip.EndDate.Format("2006-01-02"),
 		Suggestions:     suggestions,
 		Days:            days,
+	}
+
+	if pt, err := h.suggestionSvc.GetPublishedTripByTripID(c.Context(), result.Trip.TripID); err == nil {
+		resp.IsPublished = true
+		id := pt.PublishedTripID
+		resp.PublishedTripID = &id
 	}
 
 	return c.Status(200).JSON(dto.APIResponse[dto.GetTripScheduleResponseDTO]{
@@ -381,5 +391,182 @@ func (h *tripHandler) ReplaceTripSchedule(c *fiber.Ctx) error {
 		Status:  200,
 		Message: "trip schedule replaced successfully",
 		Data:    &result,
+	})
+}
+
+func (h *tripHandler) GetPublishStatus(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "tripID must be a number",
+		})
+	}
+
+	inRoom, err := h.svc.GetTripSchedule(c.Context(), userID, uint(tripID))
+	if err != nil {
+		if err.Error() == "forbidden" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "you do not have access to this trip",
+			})
+		}
+		return c.Status(500).JSON(dto.APIResponse[any]{
+			Status:  500,
+			Message: "failed to get trip",
+			Error:   err.Error(),
+		})
+	}
+	_ = inRoom
+
+	pt, err := h.suggestionSvc.GetPublishedTripByTripID(c.Context(), uint(tripID))
+	if err != nil {
+		return c.Status(200).JSON(dto.APIResponse[dto.PublishStatusResponseDTO]{
+			Status:  200,
+			Message: "success",
+			Data: &dto.PublishStatusResponseDTO{
+				IsPublished: false,
+			},
+		})
+	}
+
+	resp := dto.PublishStatusResponseDTO{
+		IsPublished:     true,
+		PublishedTripID: &pt.PublishedTripID,
+		Title:           pt.Title,
+		Description:     pt.Description,
+		ViewCount:       pt.ViewCount,
+		LikeCount:       pt.LikeCount,
+		PublishedAt:     pt.CreatedAt.Format(time.RFC3339),
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[dto.PublishStatusResponseDTO]{
+		Status:  200,
+		Message: "success",
+		Data:    &resp,
+	})
+}
+
+func (h *tripHandler) PublishTrip(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "tripID must be a number",
+		})
+	}
+
+	req := new(dto.PublishTripRequestDTO)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "invalid request body",
+		})
+	}
+
+	pt, err := h.suggestionSvc.PublishTrip(c.Context(), uint(tripID), userID, req.Title, req.Description)
+	if err != nil {
+		if err.Error() == "forbidden" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "only the trip owner can publish",
+			})
+		}
+		if err.Error() == "trip already published" {
+			return c.Status(409).JSON(dto.APIResponse[any]{
+				Status:  409,
+				Message: "conflict",
+				Error:   "trip already published",
+			})
+		}
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to publish trip",
+			Error:   err.Error(),
+		})
+	}
+
+	resp := dto.PublishTripResponseDTO{
+		PublishedTripID: pt.PublishedTripID,
+		TripID:          pt.TripID,
+		Title:           pt.Title,
+		Description:     pt.Description,
+		PublishedAt:     pt.CreatedAt.Format(time.RFC3339),
+	}
+
+	return c.Status(201).JSON(dto.APIResponse[dto.PublishTripResponseDTO]{
+		Status:  201,
+		Message: "trip published successfully",
+		Data:    &resp,
+	})
+}
+
+func (h *tripHandler) UnpublishTrip(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "tripID must be a number",
+		})
+	}
+
+	if err := h.suggestionSvc.UnpublishTrip(c.Context(), uint(tripID), userID); err != nil {
+		if err.Error() == "forbidden" {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "only the publisher can unpublish",
+			})
+		}
+		if err.Error() == "trip is not published" {
+			return c.Status(404).JSON(dto.APIResponse[any]{
+				Status:  404,
+				Message: "not found",
+				Error:   "trip is not published",
+			})
+		}
+		return c.Status(500).JSON(dto.APIResponse[any]{
+			Status:  500,
+			Message: "failed to unpublish trip",
+			Error:   err.Error(),
+		})
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[any]{
+		Status:  200,
+		Message: "trip unpublished successfully",
 	})
 }
