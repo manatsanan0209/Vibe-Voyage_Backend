@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -16,10 +18,17 @@ type Trips struct {
 	StartDate           time.Time      `json:"start_date" gorm:"not null"`
 	EndDate             time.Time      `json:"end_date" gorm:"not null"`
 	StructuredLifeStyle string         `json:"group_structured_lifestyle"`
+	Version             int            `json:"version" gorm:"not null;default:0"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
 	DeletedAt           gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
+
+var (
+	ErrForbidden                        = errors.New("forbidden")
+	ErrLifestyleNotFound                = errors.New("lifestyle not found")
+	ErrRescheduleConcurrentModification = errors.New("reschedule conflict: concurrent modification detected")
+)
 
 type PreferredDestination struct {
 	DestinationName string  `json:"destination_name"`
@@ -66,6 +75,38 @@ type GetTripScheduleResult struct {
 	Days        []DaySchedule
 }
 
+type RescheduleTripMemberScore struct {
+	UserID         uint    `json:"user_id"`
+	Username       string  `json:"username"`
+	Score          float64 `json:"score"`
+	EffectiveScore float64 `json:"effective_score"`
+	TimesServed    int     `json:"times_served"`
+	DeferredCount  int     `json:"deferred_count"`
+}
+
+type RescheduleTripResult struct {
+	TripID           uint                        `json:"trip_id"`
+	ScheduledCount   int                         `json:"scheduled_count"`
+	SuggestionsCount int                         `json:"suggestions_count"`
+	RoundCount       int                         `json:"round_count"`
+	SelectedPlaceIDs []string                    `json:"selected_place_ids"`
+	Scoreboard       []RescheduleTripMemberScore `json:"scoreboard"`
+}
+
+type RescheduleNotReadyMember struct {
+	UserID      uint   `json:"user_id"`
+	Username    string `json:"username"`
+	LifestyleID *uint  `json:"lifestyle_id,omitempty"`
+}
+
+type RescheduleAnalysisNotReadyError struct {
+	NotReadyMembers []RescheduleNotReadyMember
+}
+
+func (e *RescheduleAnalysisNotReadyError) Error() string {
+	return "analysis_incomplete"
+}
+
 type CreateTripScheduleInput struct {
 	TripScheduleID uint
 	TripID         uint
@@ -81,6 +122,7 @@ type CreateTripScheduleInput struct {
 }
 
 type RecommendedPlace struct {
+	PlaceID   string  `json:"place_id"`
 	Name      string  `json:"name"`
 	Category  string  `json:"category"`
 	Latitude  float64 `json:"latitude"`
@@ -93,6 +135,8 @@ type TripRepository interface {
 	IsUserInTripRoom(ctx context.Context, userID, tripID uint) (bool, error)
 	GetUserRoleInTripRoom(ctx context.Context, userID, tripID uint) (int, bool, error)
 	GetSchedulesByTripID(ctx context.Context, tripID uint) ([]TripSchedule, error)
+	UpdateGroupStructuredLifestyle(ctx context.Context, tripID uint, snapshot string) error
+	GetAttractionsByNames(ctx context.Context, names []string) (map[string][]Attraction, error)
 	CreateTripBundle(
 		ctx context.Context,
 		userID uint,
@@ -104,12 +148,35 @@ type TripRepository interface {
 	) (*CreateTripResult, error)
 	CreateSchedules(ctx context.Context, schedules []TripSchedule) error
 	ReplaceSchedulesByTripID(ctx context.Context, tripID uint, schedules []TripSchedule) error
+	ReplaceScheduleAndSnapshot(ctx context.Context, tripID uint, schedules []TripSchedule, snapshot string) error
 }
 
 type TripService interface {
 	CreateTrip(ctx context.Context, userID uint, input CreateTripInput) (*CreateTripResult, error)
 	JoinTripByInviteCode(ctx context.Context, userID uint, inviteCode string) (*JoinTripByInviteCodeResult, error)
 	GetTripSchedule(ctx context.Context, userID, tripID uint) (*GetTripScheduleResult, error)
+	RescheduleTrip(ctx context.Context, userID, tripID uint) (*RescheduleTripResult, error)
 	CreateTripSchedule(ctx context.Context, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
 	ReplaceTripSchedule(ctx context.Context, userID, tripID uint, inputs []CreateTripScheduleInput) ([]TripSchedule, error)
+}
+
+// IsStructuredLifestyleValid reports whether the raw JSON string is non-nil, valid JSON, and not trivially empty.
+func IsStructuredLifestyleValid(value *string) bool {
+	if value == nil {
+		return false
+	}
+
+	var payload interface{}
+	if json.Unmarshal([]byte(*value), &payload) != nil {
+		return false
+	}
+
+	switch v := payload.(type) {
+	case map[string]interface{}:
+		return len(v) > 0
+	case []interface{}:
+		return len(v) > 0
+	}
+
+	return true
 }

@@ -65,6 +65,7 @@ type MemberLifestyleSubmissionStatus struct {
 	Username              string
 	Role                  int
 	HasSubmittedLifestyle bool
+	HasAnalyzedLifestyle  bool
 	SubmittedLifestyleID  *uint
 }
 

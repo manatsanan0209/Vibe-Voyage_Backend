@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
@@ -21,6 +22,7 @@ type tripService struct {
 	notifSvc         domain.NotificationService
 	analyzeSemaphore chan struct{}
 	analyzeTimeout   time.Duration
+	rescheduleLocks  sync.Map
 }
 
 func NewTripService(
@@ -89,7 +91,7 @@ func (s *tripService) GetTripSchedule(ctx context.Context, userID, tripID uint) 
 		return nil, err
 	}
 	if !allowed {
-		return nil, errors.New("forbidden")
+		return nil, domain.ErrForbidden
 	}
 
 	trip, err := s.repo.GetByID(ctx, tripID)
@@ -485,11 +487,11 @@ func (s *tripService) ReplaceTripSchedule(ctx context.Context, userID, tripID ui
 		return nil, err
 	}
 	if !exists {
-		return nil, errors.New("forbidden")
+		return nil, domain.ErrForbidden
 	}
 
 	if role != domain.RoleOwner && role != domain.RoleMember {
-		return nil, errors.New("forbidden")
+		return nil, domain.ErrForbidden
 	}
 
 	schedules := make([]domain.TripSchedule, 0, len(inputs))

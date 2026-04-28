@@ -21,19 +21,21 @@ func (s *roomService) ListMemberLifestyleSubmissions(ctx context.Context, roomID
 		return nil, err
 	}
 
-	submittedLifestyleByUserID := make(map[uint]uint, len(lifestyles))
+	lifestyleByUserID := make(map[uint]domain.UserLifestyle, len(lifestyles))
 	for _, lifestyle := range lifestyles {
-		submittedLifestyleByUserID[lifestyle.UserID] = lifestyle.LifestyleID
+		lifestyleByUserID[lifestyle.UserID] = lifestyle
 	}
 
 	result := make([]domain.MemberLifestyleSubmissionStatus, 0, len(members))
 	for _, member := range members {
-		lifestyleID, hasSubmitted := submittedLifestyleByUserID[member.UserID]
+		lifestyle, hasSubmitted := lifestyleByUserID[member.UserID]
 
 		var submittedLifestyleID *uint
+		hasAnalyzed := false
 		if hasSubmitted {
-			id := lifestyleID
+			id := lifestyle.LifestyleID
 			submittedLifestyleID = &id
+			hasAnalyzed = domain.IsStructuredLifestyleValid(lifestyle.StructuredLifestyle)
 		}
 
 		result = append(result, domain.MemberLifestyleSubmissionStatus{
@@ -43,6 +45,7 @@ func (s *roomService) ListMemberLifestyleSubmissions(ctx context.Context, roomID
 			Username:              member.User.Username,
 			Role:                  member.Role,
 			HasSubmittedLifestyle: hasSubmitted,
+			HasAnalyzedLifestyle:  hasAnalyzed,
 			SubmittedLifestyleID:  submittedLifestyleID,
 		})
 	}

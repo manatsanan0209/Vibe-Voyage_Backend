@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"strconv"
 	"time"
 
@@ -27,6 +28,7 @@ func (h *tripHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/:tripID/schedule", h.GetTripSchedule)
 	api.Post("/:tripID/schedule", h.CreateTripSchedule)
 	api.Put("/:tripID/schedule", h.ReplaceTripSchedule)
+	api.Post("/:tripID/reschedule", h.RescheduleTrip)
 	api.Get("/:tripID/publish", h.GetPublishStatus)
 	api.Post("/:tripID/publish", h.PublishTrip)
 	api.Delete("/:tripID/publish", h.UnpublishTrip)
@@ -68,7 +70,7 @@ func (h *tripHandler) GetTripSchedule(c *fiber.Ctx) error {
 
 	result, err := h.svc.GetTripSchedule(c.Context(), userID, uint(tripID))
 	if err != nil {
-		if err.Error() == "forbidden" {
+		if errors.Is(err, domain.ErrForbidden) {
 			return c.Status(403).JSON(dto.APIResponse[any]{
 				Status:  403,
 				Message: "forbidden",
@@ -367,7 +369,7 @@ func (h *tripHandler) ReplaceTripSchedule(c *fiber.Ctx) error {
 
 	replaced, err := h.svc.ReplaceTripSchedule(c.Context(), userID, uint(tripID), inputs)
 	if err != nil {
-		if err.Error() == "forbidden" {
+		if errors.Is(err, domain.ErrForbidden) {
 			return c.Status(403).JSON(dto.APIResponse[any]{
 				Status:  403,
 				Message: "forbidden",
@@ -391,6 +393,99 @@ func (h *tripHandler) ReplaceTripSchedule(c *fiber.Ctx) error {
 		Status:  200,
 		Message: "trip schedule replaced successfully",
 		Data:    &result,
+	})
+}
+
+func (h *tripHandler) RescheduleTrip(c *fiber.Ctx) error {
+	userID, ok := authMiddleware.GetUserID(c)
+	if !ok {
+		return c.Status(401).JSON(dto.APIResponse[any]{
+			Status:  401,
+			Message: "unauthorized",
+			Error:   "invalid token claims",
+		})
+	}
+
+	tripID, err := strconv.ParseUint(c.Params("tripID"), 10, 64)
+	if err != nil {
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "bad request",
+			Error:   "tripID must be a number",
+		})
+	}
+
+	result, err := h.svc.RescheduleTrip(c.Context(), userID, uint(tripID))
+	if err != nil {
+		var notReadyErr *domain.RescheduleAnalysisNotReadyError
+		if errors.As(err, &notReadyErr) {
+			notReady := make([]dto.RescheduleNotReadyMemberDTO, 0, len(notReadyErr.NotReadyMembers))
+			for _, item := range notReadyErr.NotReadyMembers {
+				notReady = append(notReady, dto.RescheduleNotReadyMemberDTO{
+					UserID:      item.UserID,
+					Username:    item.Username,
+					LifestyleID: item.LifestyleID,
+				})
+			}
+
+			conflict := dto.RescheduleConflictResponseDTO{
+				NotReadyMembers: notReady,
+			}
+			return c.Status(409).JSON(dto.APIResponse[dto.RescheduleConflictResponseDTO]{
+				Status:  409,
+				Message: "reschedule blocked: lifestyle analysis is incomplete",
+				Data:    &conflict,
+				Error:   "analysis_incomplete",
+			})
+		}
+
+		if errors.Is(err, domain.ErrForbidden) {
+			return c.Status(403).JSON(dto.APIResponse[any]{
+				Status:  403,
+				Message: "forbidden",
+				Error:   "only room owner can reschedule this trip",
+			})
+		}
+		if errors.Is(err, domain.ErrRescheduleConcurrentModification) {
+			return c.Status(409).JSON(dto.APIResponse[any]{
+				Status:  409,
+				Message: "reschedule conflict: another reschedule is currently in progress",
+				Error:   err.Error(),
+			})
+		}
+
+		return c.Status(400).JSON(dto.APIResponse[any]{
+			Status:  400,
+			Message: "failed to reschedule trip",
+			Error:   err.Error(),
+		})
+	}
+
+	scoreboard := make([]dto.RescheduleTripMemberScoreDTO, 0, len(result.Scoreboard))
+	for _, item := range result.Scoreboard {
+		scoreboard = append(scoreboard, dto.RescheduleTripMemberScoreDTO{
+			UserID:         item.UserID,
+			Username:       item.Username,
+			Score:          item.Score,
+			EffectiveScore: item.EffectiveScore,
+			TimesServed:    item.TimesServed,
+			DeferredCount:  item.DeferredCount,
+		})
+	}
+
+	resp := dto.RescheduleTripResponseDTO{
+		TripID:           result.TripID,
+		ScheduledCount:   result.ScheduledCount,
+		SuggestionsCount: result.SuggestionsCount,
+		RoundCount:       result.RoundCount,
+		SelectedPlaceIDs: result.SelectedPlaceIDs,
+		Scoreboard:       scoreboard,
+	}
+
+	return c.Status(200).JSON(dto.APIResponse[dto.RescheduleTripResponseDTO]{
+		Status:  200,
+		Message: "trip rescheduled successfully",
+		Data:    &resp,
 	})
 }
 

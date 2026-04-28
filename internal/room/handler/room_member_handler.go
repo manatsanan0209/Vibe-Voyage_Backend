@@ -47,6 +47,7 @@ func (h *roomHandler) ListMemberLifestyleSubmissions(c *fiber.Ctx) error {
 			Role:                  submission.Role,
 			RoleName:              domain.RoomRoleName(submission.Role),
 			HasSubmittedLifestyle: submission.HasSubmittedLifestyle,
+			HasAnalyzedLifestyle:  submission.HasAnalyzedLifestyle,
 			LifestyleID:           submission.SubmittedLifestyleID,
 		})
 	}

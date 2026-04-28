@@ -67,6 +67,34 @@ type CreateTripScheduleRequestDTO struct {
 	Items []CreateTripScheduleItemRequestDTO `json:"items"`
 }
 
+type RescheduleTripMemberScoreDTO struct {
+	UserID         uint    `json:"user_id"`
+	Username       string  `json:"username"`
+	Score          float64 `json:"score"`
+	EffectiveScore float64 `json:"effective_score"`
+	TimesServed    int     `json:"times_served"`
+	DeferredCount  int     `json:"deferred_count"`
+}
+
+type RescheduleTripResponseDTO struct {
+	TripID           uint                           `json:"trip_id"`
+	ScheduledCount   int                            `json:"scheduled_count"`
+	SuggestionsCount int                            `json:"suggestions_count"`
+	RoundCount       int                            `json:"round_count"`
+	SelectedPlaceIDs []string                       `json:"selected_place_ids"`
+	Scoreboard       []RescheduleTripMemberScoreDTO `json:"scoreboard"`
+}
+
+type RescheduleNotReadyMemberDTO struct {
+	UserID      uint   `json:"user_id"`
+	Username    string `json:"username"`
+	LifestyleID *uint  `json:"lifestyle_id,omitempty"`
+}
+
+type RescheduleConflictResponseDTO struct {
+	NotReadyMembers []RescheduleNotReadyMemberDTO `json:"not_ready_members"`
+}
+
 type CreateTripResponseDTO struct {
 	RoomID          uint                  `json:"room_id"`
 	TripID          uint                  `json:"trip_id"`
