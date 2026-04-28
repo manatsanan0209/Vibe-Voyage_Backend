@@ -6,6 +6,6 @@ import (
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip/handler"
 )
 
-func Setup(app *fiber.App, svc domain.TripService) {
-	handler.NewTripHandler(svc).RegisterRoutes(app)
+func Setup(app *fiber.App, svc domain.TripService, suggestionSvc domain.TripSuggestionService) {
+	handler.NewTripHandler(svc, suggestionSvc).RegisterRoutes(app)
 }

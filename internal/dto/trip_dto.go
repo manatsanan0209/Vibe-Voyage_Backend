@@ -44,6 +44,8 @@ type GetTripScheduleResponseDTO struct {
 	DestinationName string                `json:"destination_name"`
 	StartDate       string                `json:"start_date"`
 	EndDate         string                `json:"end_date"`
+	IsPublished     bool                  `json:"is_published"`
+	PublishedTripID *uint                 `json:"published_trip_id,omitempty"`
 	Suggestions     []TripScheduleItemDTO `json:"suggestions"`
 	Days            []DayScheduleDTO      `json:"days"`
 }
