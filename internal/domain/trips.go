@@ -81,6 +81,7 @@ type CreateTripScheduleInput struct {
 }
 
 type RecommendedPlace struct {
+	PlaceID   string  `json:"place_id"`
 	Name      string  `json:"name"`
 	Category  string  `json:"category"`
 	Latitude  float64 `json:"latitude"`
