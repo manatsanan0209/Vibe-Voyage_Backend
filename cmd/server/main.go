@@ -11,6 +11,9 @@ import (
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	tripRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip/repository"
 	tripService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip/service"
+	tripSuggestionPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip_suggestion"
+	tripSuggestionRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip_suggestion/repository"
+	tripSuggestionService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip_suggestion/service"
 
 	userRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user/repository"
 	userService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user/service"
@@ -56,6 +59,9 @@ func Run() error {
 		&domain.TripSchedule{},
 		&domain.UserSettings{},
 		&domain.Notification{},
+		&domain.PublishedTrip{},
+		&domain.TripLike{},
+		&domain.TripBookmark{},
 	)
 	if err != nil {
 		log.Fatal("Migration failed:", err)
@@ -90,6 +96,8 @@ func Run() error {
 
 	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc, notifSvc)
 	tripSvc := tripService.NewTripService(tripRepository, restaurantRepository, attractionRepository, lifestyleSvc, roomSvc, notifSvc)
+	tripSuggestionRepository := tripSuggestionRepo.NewTripSuggestionRepository(gormDB)
+	tripSuggestionSvc := tripSuggestionService.NewTripSuggestionService(tripSuggestionRepository)
 
 	healthPkg.RegisterRoutes(app)
 	userPkg.Setup(app, svc)
@@ -99,11 +107,12 @@ func Run() error {
 	attractionPkg.Setup(app, gormDB)
 	hotelPkg.Setup(app, gormDB)
 	restaurantPkg.Setup(app, gormDB)
-	tripPkg.Setup(app, tripSvc)
+	tripPkg.Setup(app, tripSvc, tripSuggestionSvc)
 	userLifestylePkg.Setup(app, lifestyleSvc)
 	roomPkg.Setup(app, roomSvc)
 	settingsPkg.SetupWithRepo(app, settingsRepository)
 	notificationPkg.SetupHandler(app, notifSvc)
+	tripSuggestionPkg.Setup(app, tripSuggestionSvc)
 
 	return app.Listen(":8080")
 }
