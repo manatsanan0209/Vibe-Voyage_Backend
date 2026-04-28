@@ -17,7 +17,7 @@ type Trips struct {
 	DestinationID       string         `json:"destination_id" gorm:"not null"`
 	StartDate           time.Time      `json:"start_date" gorm:"not null"`
 	EndDate             time.Time      `json:"end_date" gorm:"not null"`
-	StructuredLifeStyle string         `json:"group_structured_lifestyle"`
+	StructuredLifeStyle string         `json:"group_structured_lifestyle" gorm:"column:structured_lifestyle"`
 	Version             int            `json:"version" gorm:"not null;default:0"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
