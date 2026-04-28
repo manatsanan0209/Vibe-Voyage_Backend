@@ -84,7 +84,7 @@ func (r *tripRepository) UpdateGroupStructuredLifestyle(ctx context.Context, tri
 	return r.db.WithContext(ctx).
 		Model(&domain.Trips{}).
 		Where("trip_id = ?", tripID).
-		Update("group_structured_lifestyle", snapshot).Error
+		Update("structured_lifestyle", snapshot).Error
 }
 
 func (r *tripRepository) GetAttractionsByNames(ctx context.Context, names []string) (map[string][]domain.Attraction, error) {
@@ -303,8 +303,8 @@ func (r *tripRepository) ReplaceScheduleAndSnapshot(ctx context.Context, tripID 
 		return tx.Model(&domain.Trips{}).
 			Where("trip_id = ?", tripID).
 			Updates(map[string]interface{}{
-				"group_structured_lifestyle": snapshot,
-				"version":                    gorm.Expr("version + 1"),
+				"structured_lifestyle": snapshot,
+				"version":              gorm.Expr("version + 1"),
 			}).Error
 	})
 }
