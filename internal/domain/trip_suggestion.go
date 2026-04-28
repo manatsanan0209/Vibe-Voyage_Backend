@@ -70,6 +70,7 @@ type TripSuggestionRepository interface {
 	ToggleBookmark(ctx context.Context, publishedTripID, userID uint) (bool, error)
 	GetBookmarkedTrips(ctx context.Context, userID uint) ([]PublishedTripWithMeta, error)
 	UseAsTemplate(ctx context.Context, publishedTripID, userID uint, input UseAsTemplateInput) (*CreateTripResult, error)
+	GetMyPublishedTrips(ctx context.Context, userID uint, page, limit int) ([]PublishedTripWithMeta, int64, error)
 }
 
 type TripSuggestionService interface {
@@ -82,4 +83,5 @@ type TripSuggestionService interface {
 	ToggleBookmark(ctx context.Context, publishedTripID, userID uint) (bool, error)
 	GetBookmarks(ctx context.Context, userID uint) ([]PublishedTripWithMeta, error)
 	UseAsTemplate(ctx context.Context, publishedTripID, userID uint, input UseAsTemplateInput) (*CreateTripResult, error)
+	GetMyPosts(ctx context.Context, userID uint, page, limit int) ([]PublishedTripWithMeta, int64, error)
 }

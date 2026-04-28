@@ -100,7 +100,7 @@ func Run() error {
 	tripSuggestionSvc := tripSuggestionService.NewTripSuggestionService(tripSuggestionRepository)
 
 	healthPkg.RegisterRoutes(app)
-	userPkg.Setup(app, svc)
+	userPkg.Setup(app, svc, tripSuggestionSvc)
 	authPkg.Setup(app, repo)
 
 	placePkg.Setup(app, gormDB)

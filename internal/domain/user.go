@@ -19,11 +19,18 @@ type User struct {
 	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
+type UpdateProfileInput struct {
+	Username     *string
+	FullName     *string
+	ProfileImage *string
+}
+
 type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, id uint) (*User, error)
 	GetByUsername(ctx context.Context, username string) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
+	Update(ctx context.Context, user *User) error
 }
 
 type UserService interface {
@@ -31,6 +38,7 @@ type UserService interface {
 	GetUserByID(ctx context.Context, id uint) (*User, error)
 	GetUserByUsername(ctx context.Context, username string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
+	UpdateProfile(ctx context.Context, userID uint, input UpdateProfileInput) (*User, error)
 }
 
 type AuthRepository interface {
