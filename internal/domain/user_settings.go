@@ -9,7 +9,7 @@ type UserSettings struct {
 	SettingsID uint      `json:"settings_id" gorm:"primaryKey;autoIncrement"`
 	UserID     uint      `json:"user_id" gorm:"not null;uniqueIndex"`
 	User       User      `json:"-" gorm:"foreignKey:UserID;references:UserID"`
-	Theme                  string    `json:"theme" gorm:"default:system"`
+	Theme                  string    `json:"theme" gorm:"default:light"`
 	Language               string    `json:"language" gorm:"default:en"`
 	DateFormat             string    `json:"date_format" gorm:"default:DD/MM/YYYY"`
 	TimeFormat             string    `json:"time_format" gorm:"default:24h"`
