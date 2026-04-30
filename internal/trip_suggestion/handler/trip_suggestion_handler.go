@@ -20,14 +20,13 @@ func NewTripSuggestionHandler(svc domain.TripSuggestionService) *tripSuggestionH
 
 func (h *tripSuggestionHandler) RegisterRoutes(app *fiber.App) {
 	api := app.Group("/api/trip-suggestions")
-	api.Use(authMiddleware.Authorize())
 
 	api.Get("/", h.GetFeed)
-	api.Get("/bookmarks", h.GetBookmarks)
+	api.Get("/bookmarks", authMiddleware.Authorize(), h.GetBookmarks)
 	api.Get("/:publishedTripID", h.GetDetail)
-	api.Post("/:publishedTripID/like", h.ToggleLike)
-	api.Post("/:publishedTripID/bookmark", h.ToggleBookmark)
-	api.Post("/:publishedTripID/use-as-template", h.UseAsTemplate)
+	api.Post("/:publishedTripID/like", authMiddleware.Authorize(), h.ToggleLike)
+	api.Post("/:publishedTripID/bookmark", authMiddleware.Authorize(), h.ToggleBookmark)
+	api.Post("/:publishedTripID/use-as-template", authMiddleware.Authorize(), h.UseAsTemplate)
 }
 
 func toScheduleItemDTO(item domain.TripSchedule) dto.TripScheduleItemDTO {
@@ -62,6 +61,7 @@ func toPublishedTripSummaryDTO(meta domain.PublishedTripWithMeta) dto.PublishedT
 			Username:     meta.PublisherName,
 			ProfileImage: meta.PublisherImage,
 		},
+		ViewerRole:   meta.ViewerRole,
 		IsLiked:      meta.IsLiked,
 		IsBookmarked: meta.IsBookmarked,
 		PublishedAt:  meta.PublishedTrip.CreatedAt.Format(time.RFC3339),
@@ -69,12 +69,12 @@ func toPublishedTripSummaryDTO(meta domain.PublishedTripWithMeta) dto.PublishedT
 }
 
 func (h *tripSuggestionHandler) GetFeed(c *fiber.Ctx) error {
-	userID, ok := authMiddleware.GetUserID(c)
-	if !ok {
+	userID, _, err := authMiddleware.GetOptionalUserID(c)
+	if err != nil {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "invalid token claims",
+			Error:   err.Error(),
 		})
 	}
 
@@ -110,12 +110,12 @@ func (h *tripSuggestionHandler) GetFeed(c *fiber.Ctx) error {
 }
 
 func (h *tripSuggestionHandler) GetDetail(c *fiber.Ctx) error {
-	userID, ok := authMiddleware.GetUserID(c)
-	if !ok {
+	userID, _, err := authMiddleware.GetOptionalUserID(c)
+	if err != nil {
 		return c.Status(401).JSON(dto.APIResponse[any]{
 			Status:  401,
 			Message: "unauthorized",
-			Error:   "invalid token claims",
+			Error:   err.Error(),
 		})
 	}
 

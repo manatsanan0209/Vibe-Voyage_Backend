@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"os"
 	"strings"
 
@@ -13,6 +14,34 @@ const UserIDContextKey = "userID"
 
 func Authorize() fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		path := c.Path()
+		if c.Method() == fiber.MethodGet && strings.HasPrefix(path, "/api/trip-suggestions") {
+			authHeader := c.Get("Authorization")
+			if authHeader == "" {
+				return c.Next()
+			}
+			if !strings.HasPrefix(authHeader, "Bearer ") {
+				return c.Next()
+			}
+
+			tokenStr := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+			if tokenStr == "" || tokenStr == "undefined" || tokenStr == "null" {
+				return c.Next()
+			}
+
+			secret := os.Getenv("AUTH_TOKEN_SECRET")
+			claims, err := token.Validate(tokenStr, secret)
+			if err != nil {
+				return unauthorized(c, err.Error())
+			}
+			if claims.UserID == 0 {
+				return unauthorized(c, "invalid token claims")
+			}
+
+			c.Locals(UserIDContextKey, claims.UserID)
+			return c.Next()
+		}
+
 		authHeader := c.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 			return unauthorized(c, "missing or invalid authorization header")
@@ -41,6 +70,32 @@ func GetUserID(c *fiber.Ctx) (uint, bool) {
 	}
 
 	return userID, true
+}
+
+func GetOptionalUserID(c *fiber.Ctx) (uint, bool, error) {
+	authHeader := c.Get("Authorization")
+	if authHeader == "" {
+		return 0, false, nil
+	}
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return 0, false, nil
+	}
+
+	tokenStr := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+	if tokenStr == "" || tokenStr == "undefined" || tokenStr == "null" {
+		return 0, false, nil
+	}
+
+	secret := os.Getenv("AUTH_TOKEN_SECRET")
+	claims, err := token.Validate(tokenStr, secret)
+	if err != nil {
+		return 0, false, err
+	}
+	if claims.UserID == 0 {
+		return 0, false, errors.New("invalid token claims")
+	}
+
+	return claims.UserID, true, nil
 }
 
 func unauthorized(c *fiber.Ctx, errMsg string) error {

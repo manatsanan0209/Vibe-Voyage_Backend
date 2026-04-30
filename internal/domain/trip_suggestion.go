@@ -47,6 +47,7 @@ type PublishedTripWithMeta struct {
 	Trip           *Trips
 	PublisherName  string
 	PublisherImage string
+	ViewerRole     *string
 	ScheduleDays   []DaySchedule
 	IsLiked        bool
 	IsBookmarked   bool

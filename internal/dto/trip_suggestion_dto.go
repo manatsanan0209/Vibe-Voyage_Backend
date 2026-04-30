@@ -17,7 +17,8 @@ type PublishedTripSummaryDTO struct {
 	EndDate         string                    `json:"end_date"`
 	ViewCount       int64                     `json:"view_count"`
 	LikeCount       int64                     `json:"like_count"`
-	Publisher       PublishedTripPublisherDTO  `json:"publisher"`
+	Publisher       PublishedTripPublisherDTO `json:"publisher"`
+	ViewerRole      *string                   `json:"viewer_role"`
 	IsLiked         bool                      `json:"is_liked"`
 	IsBookmarked    bool                      `json:"is_bookmarked"`
 	PublishedAt     string                    `json:"published_at"`

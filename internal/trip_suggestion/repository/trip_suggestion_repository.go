@@ -14,6 +14,49 @@ type tripSuggestionRepository struct {
 	db *gorm.DB
 }
 
+func viewerRoleFromRoomMemberRole(role int) *string {
+	var viewerRole string
+	switch role {
+	case domain.RoleOwner:
+		viewerRole = "owner"
+	case domain.RoleMember:
+		viewerRole = "member"
+	default:
+		return nil
+	}
+
+	return &viewerRole
+}
+
+func (r *tripSuggestionRepository) loadViewerRolesByRoomID(ctx context.Context, roomIDs []uint, userID uint) (map[uint]*string, error) {
+	viewerRoles := make(map[uint]*string)
+	if userID == 0 || len(roomIDs) == 0 {
+		return viewerRoles, nil
+	}
+
+	type viewerRoleRow struct {
+		RoomID uint
+		Role   int
+	}
+
+	var rows []viewerRoleRow
+	if err := r.db.WithContext(ctx).
+		Model(&domain.RoomMember{}).
+		Select("room_id, role").
+		Where("room_id IN ? AND user_id = ?", roomIDs, userID).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		if viewerRole := viewerRoleFromRoomMemberRole(row.Role); viewerRole != nil {
+			viewerRoles[row.RoomID] = viewerRole
+		}
+	}
+
+	return viewerRoles, nil
+}
+
 func NewTripSuggestionRepository(db *gorm.DB) domain.TripSuggestionRepository {
 	return &tripSuggestionRepository{db: db}
 }
@@ -45,8 +88,17 @@ func (r *tripSuggestionRepository) GetPublishedTrips(ctx context.Context, opts d
 		ids[i] = p.PublishedTripID
 	}
 
+	roomIDs := make([]uint, 0, len(published))
+	for i := range published {
+		roomIDs = append(roomIDs, published[i].Trip.RoomID)
+	}
+
 	likedSet := map[uint]bool{}
 	bookmarkedSet := map[uint]bool{}
+	viewerRoles, err := r.loadViewerRolesByRoomID(ctx, roomIDs, opts.UserID)
+	if err != nil {
+		return nil, 0, err
+	}
 	if opts.UserID > 0 {
 		var likedIDs []uint
 		r.db.WithContext(ctx).Model(&domain.TripLike{}).
@@ -72,6 +124,7 @@ func (r *tripSuggestionRepository) GetPublishedTrips(ctx context.Context, opts d
 			Trip:           &published[i].Trip,
 			PublisherName:  published[i].User.Username,
 			PublisherImage: published[i].User.ProfileImage,
+			ViewerRole:     viewerRoles[published[i].Trip.RoomID],
 			IsLiked:        likedSet[published[i].PublishedTripID],
 			IsBookmarked:   bookmarkedSet[published[i].PublishedTripID],
 		})
@@ -115,6 +168,12 @@ func (r *tripSuggestionRepository) GetPublishedTripByID(ctx context.Context, pub
 	}
 
 	if userID > 0 {
+		viewerRoles, err := r.loadViewerRolesByRoomID(ctx, []uint{pt.Trip.RoomID}, userID)
+		if err != nil {
+			return nil, err
+		}
+		meta.ViewerRole = viewerRoles[pt.Trip.RoomID]
+
 		var likeCount int64
 		r.db.WithContext(ctx).Model(&domain.TripLike{}).
 			Where("published_trip_id = ? AND user_id = ?", publishedTripID, userID).
@@ -275,6 +334,16 @@ func (r *tripSuggestionRepository) GetBookmarkedTrips(ctx context.Context, userI
 		Where("published_trip_id IN ?", publishedTripIDs).
 		Find(&published)
 
+	roomIDs := make([]uint, 0, len(published))
+	for i := range published {
+		roomIDs = append(roomIDs, published[i].Trip.RoomID)
+	}
+
+	viewerRoles, err := r.loadViewerRolesByRoomID(ctx, roomIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	var likedIDs []uint
 	r.db.WithContext(ctx).Model(&domain.TripLike{}).
 		Where("published_trip_id IN ? AND user_id = ?", publishedTripIDs, userID).
@@ -291,6 +360,7 @@ func (r *tripSuggestionRepository) GetBookmarkedTrips(ctx context.Context, userI
 			Trip:           &published[i].Trip,
 			PublisherName:  published[i].User.Username,
 			PublisherImage: published[i].User.ProfileImage,
+			ViewerRole:     viewerRoles[published[i].Trip.RoomID],
 			IsLiked:        likedSet[published[i].PublishedTripID],
 			IsBookmarked:   true,
 		})
