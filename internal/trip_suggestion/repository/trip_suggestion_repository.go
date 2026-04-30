@@ -465,3 +465,67 @@ func (r *tripSuggestionRepository) UseAsTemplate(ctx context.Context, publishedT
 
 	return &result, nil
 }
+
+func (r *tripSuggestionRepository) GetMyPublishedTrips(ctx context.Context, userID uint, page, limit int) ([]domain.PublishedTripWithMeta, int64, error) {
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&domain.PublishedTrip{}).
+		Where("user_id = ?", userID).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var published []domain.PublishedTrip
+	offset := (page - 1) * limit
+	if err := r.db.WithContext(ctx).
+		Preload("Trip").
+		Preload("User").
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&published).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if len(published) == 0 {
+		return []domain.PublishedTripWithMeta{}, total, nil
+	}
+
+	ids := make([]uint, len(published))
+	for i, p := range published {
+		ids[i] = p.PublishedTripID
+	}
+
+	likedSet := map[uint]bool{}
+	bookmarkedSet := map[uint]bool{}
+
+	var likedIDs []uint
+	r.db.WithContext(ctx).Model(&domain.TripLike{}).
+		Where("published_trip_id IN ? AND user_id = ?", ids, userID).
+		Pluck("published_trip_id", &likedIDs)
+	for _, id := range likedIDs {
+		likedSet[id] = true
+	}
+
+	var bookmarkedIDs []uint
+	r.db.WithContext(ctx).Model(&domain.TripBookmark{}).
+		Where("published_trip_id IN ? AND user_id = ?", ids, userID).
+		Pluck("published_trip_id", &bookmarkedIDs)
+	for _, id := range bookmarkedIDs {
+		bookmarkedSet[id] = true
+	}
+
+	result := make([]domain.PublishedTripWithMeta, 0, len(published))
+	for i := range published {
+		result = append(result, domain.PublishedTripWithMeta{
+			PublishedTrip:  &published[i],
+			Trip:           &published[i].Trip,
+			PublisherName:  published[i].User.Username,
+			PublisherImage: published[i].User.ProfileImage,
+			IsLiked:        likedSet[published[i].PublishedTripID],
+			IsBookmarked:   bookmarkedSet[published[i].PublishedTripID],
+		})
+	}
+
+	return result, total, nil
+}

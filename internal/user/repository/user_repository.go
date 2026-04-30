@@ -48,3 +48,7 @@ func (r *pgUserRepository) GetByEmail(ctx context.Context, email string) (*domai
 	}
 	return &user, nil
 }
+
+func (r *pgUserRepository) Update(ctx context.Context, user *domain.User) error {
+	return r.db.WithContext(ctx).Save(user).Error
+}
