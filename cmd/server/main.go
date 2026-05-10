@@ -1,7 +1,10 @@
 package server
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -73,11 +76,7 @@ func Run() error {
 	log.Println("Database Migration Completed!")
 
 	app := fiber.New()
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowMethods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
-	}))
+	app.Use(cors.New(corsConfigFromEnv()))
 	app.Use(logger.New(logger.Config{
 		TimeFormat: "2006-01-02 15:04:05",
 		Format:     "${time} | ${status} | ${latency} | ${method} ${path}\n",
@@ -121,5 +120,36 @@ func Run() error {
 	notificationPkg.SetupHandler(app, notifSvc)
 	tripSuggestionPkg.Setup(app, tripSuggestionSvc)
 
-	return app.Listen(":8080")
+	port, err := portFromEnv()
+	if err != nil {
+		return err
+	}
+
+	return app.Listen(":" + port)
+}
+
+func portFromEnv() (string, error) {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return "", fmt.Errorf("PORT environment variable is required")
+	}
+
+	return port, nil
+}
+
+func corsConfigFromEnv() cors.Config {
+	return cors.Config{
+		AllowOrigins: envOrDefault("CORS_ALLOW_ORIGINS", "*"),
+		AllowMethods: envOrDefault("CORS_ALLOW_METHODS", "GET,POST,PUT,PATCH,DELETE,OPTIONS"),
+		AllowHeaders: envOrDefault("CORS_ALLOW_HEADERS", "Origin,Content-Type,Accept,Authorization"),
+	}
+}
+
+func envOrDefault(key string, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	return value
 }
