@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"gorm.io/gorm"
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
+	"gorm.io/gorm"
 )
 
 type pgUserRepository struct {
@@ -33,7 +33,7 @@ func (r *pgUserRepository) GetByID(ctx context.Context, id uint) (*domain.User, 
 
 func (r *pgUserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	var user domain.User
-	err := r.db.WithContext(ctx).Where("username = ?", username).First(&user).Error
+	err := r.db.WithContext(ctx).Where("LOWER(username) = LOWER(?)", username).First(&user).Error
 	if err != nil {
 		return nil, err
 	}
