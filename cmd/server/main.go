@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -125,13 +124,14 @@ func Run() error {
 		return err
 	}
 
-	return app.Listen(":" + port)
+	return app.Listen("0.0.0.0:" + port)
 }
 
 func portFromEnv() (string, error) {
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
-		return "", fmt.Errorf("PORT environment variable is required")
+		log.Println("PORT environment variable not found, using fallback port 8080")
+		return "8080", nil
 	}
 
 	return port, nil
