@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,7 +20,10 @@ type tripService struct {
 	attractionRepo   domain.AttractionRepository
 	lifestyleSvc     domain.UserLifestyleService
 	roomSvc          domain.RoomService
+	roomRepo         domain.RoomRepository
+	suggestionSvc    domain.TripSuggestionService
 	notifSvc         domain.NotificationService
+	placeDetailSvc   domain.GooglePlaceDetailService
 	analyzeSemaphore chan struct{}
 	analyzeTimeout   time.Duration
 	rescheduleLocks  sync.Map
@@ -31,7 +35,10 @@ func NewTripService(
 	attractionRepo domain.AttractionRepository,
 	lifestyleSvc domain.UserLifestyleService,
 	roomSvc domain.RoomService,
+	roomRepo domain.RoomRepository,
+	suggestionSvc domain.TripSuggestionService,
 	notifSvc domain.NotificationService,
+	placeDetailSvc domain.GooglePlaceDetailService,
 ) domain.TripService {
 	return &tripService{
 		repo:             repo,
@@ -39,7 +46,10 @@ func NewTripService(
 		attractionRepo:   attractionRepo,
 		lifestyleSvc:     lifestyleSvc,
 		roomSvc:          roomSvc,
+		roomRepo:         roomRepo,
+		suggestionSvc:    suggestionSvc,
 		notifSvc:         notifSvc,
+		placeDetailSvc:   placeDetailSvc,
 		analyzeSemaphore: make(chan struct{}, 5),
 		analyzeTimeout:   45 * time.Second,
 	}
@@ -122,11 +132,105 @@ func (s *tripService) GetTripSchedule(ctx context.Context, userID, tripID uint) 
 			Items:     items,
 		})
 	}
+	sort.Slice(days, func(i, j int) bool { return days[i].DayNumber < days[j].DayNumber })
+
+	allItems := make([]domain.TripSchedule, 0, len(schedules))
+	allItems = append(allItems, schedules...)
+	placeDetails := map[string]domain.PlaceDetailAttachment{}
+	if s.placeDetailSvc != nil {
+		placeDetails, err = s.placeDetailSvc.EnrichScheduleItems(ctx, allItems)
+		if err != nil {
+			log.Printf("[GetTripSchedule] place detail enrichment failed (trip_id=%d): %v", tripID, err)
+			placeDetails = map[string]domain.PlaceDetailAttachment{}
+		}
+	}
 
 	return &domain.GetTripScheduleResult{
-		Trip:        trip,
-		Suggestions: suggestions,
-		Days:        days,
+		Trip:         trip,
+		Suggestions:  suggestions,
+		Days:         days,
+		PlaceDetails: placeDetails,
+	}, nil
+}
+
+func (s *tripService) GetPlanTripBootstrap(ctx context.Context, userID, tripID uint) (*domain.PlanTripBootstrapResult, error) {
+	membership, exists, err := s.repo.GetTripRoomMembership(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, domain.ErrForbidden
+	}
+
+	trip := membership.Trip
+	schedules, err := s.repo.GetSchedulesByTripID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+
+	var suggestions []domain.TripSchedule
+	dayMap := make(map[int][]domain.TripSchedule)
+	for _, item := range schedules {
+		if item.DayNumber == 0 && item.SequenceOrder == 0 {
+			suggestions = append(suggestions, item)
+			continue
+		}
+		dayMap[item.DayNumber] = append(dayMap[item.DayNumber], item)
+	}
+
+	days := make([]domain.DaySchedule, 0, len(dayMap))
+	for dayNum, items := range dayMap {
+		days = append(days, domain.DaySchedule{
+			DayNumber: dayNum,
+			Items:     items,
+		})
+	}
+	sort.Slice(days, func(i, j int) bool { return days[i].DayNumber < days[j].DayNumber })
+
+	placeDetails := map[string]domain.PlaceDetailAttachment{}
+	if s.placeDetailSvc != nil {
+		placeDetails, err = s.placeDetailSvc.EnrichScheduleItems(ctx, schedules)
+		if err != nil {
+			log.Printf("[GetPlanTripBootstrap] place detail enrichment failed (trip_id=%d): %v", tripID, err)
+			placeDetails = map[string]domain.PlaceDetailAttachment{}
+		}
+	}
+
+	members, err := s.roomRepo.GetMemberLifestyleStatusesByRoomID(ctx, trip.RoomID)
+	if err != nil {
+		return nil, err
+	}
+
+	var publishStatus *domain.PlanTripPublishStatus
+	if membership.Role == domain.RoleOwner {
+		publishStatus = &domain.PlanTripPublishStatus{IsPublished: false}
+		if s.suggestionSvc != nil {
+			if published, err := s.suggestionSvc.GetPublishedTripByTripID(ctx, tripID); err == nil && published != nil {
+				id := published.PublishedTripID
+				publishedAt := published.CreatedAt
+				publishStatus = &domain.PlanTripPublishStatus{
+					IsPublished:     true,
+					PublishedTripID: &id,
+					Title:           published.Title,
+					Description:     published.Description,
+					ViewCount:       published.ViewCount,
+					LikeCount:       published.LikeCount,
+					PublishedAt:     &publishedAt,
+				}
+			}
+		}
+	}
+
+	return &domain.PlanTripBootstrapResult{
+		Trip:                 trip,
+		CurrentMember:        *membership,
+		Suggestions:          suggestions,
+		Days:                 days,
+		PlaceDetails:         placeDetails,
+		Members:              members,
+		PublishStatus:        publishStatus,
+		SchedulePollAfterMS:  5000,
+		ReadinessPollAfterMS: 3000,
 	}, nil
 }
 
@@ -599,6 +703,60 @@ func nearestNeighborOrder(places []domain.TripSchedule) []domain.TripSchedule {
 	return result
 }
 
+// nearestNeighborOrderWithTrace is like nearestNeighborOrder but also records
+// each greedy pick as a NearestNeighborStep (from, to, distance).
+func nearestNeighborOrderWithTrace(places []domain.TripSchedule) ([]domain.NearestNeighborStep, []domain.TripSchedule) {
+	if len(places) == 0 {
+		return nil, places
+	}
+	visited := make([]bool, len(places))
+	result := make([]domain.TripSchedule, 0, len(places))
+	steps := make([]domain.NearestNeighborStep, 0, len(places)-1)
+
+	current := 0
+	visited[current] = true
+	result = append(result, places[current])
+
+	for len(result) < len(places) {
+		minDist := math.MaxFloat64
+		nearest := -1
+		for j := range places {
+			if visited[j] {
+				continue
+			}
+			d := haversine(places[current].Latitude, places[current].Longitude,
+				places[j].Latitude, places[j].Longitude)
+			if d < minDist {
+				minDist = d
+				nearest = j
+			}
+		}
+		if nearest == -1 {
+			break
+		}
+		steps = append(steps, domain.NearestNeighborStep{
+			Step: len(result),
+			From: domain.PlanTracePlace{
+				Name:      places[current].PlaceName,
+				PlaceID:   places[current].PlaceID,
+				Latitude:  places[current].Latitude,
+				Longitude: places[current].Longitude,
+			},
+			To: domain.PlanTracePlace{
+				Name:      places[nearest].PlaceName,
+				PlaceID:   places[nearest].PlaceID,
+				Latitude:  places[nearest].Latitude,
+				Longitude: places[nearest].Longitude,
+			},
+			DistanceKm: math.Round(minDist*100) / 100,
+		})
+		visited[nearest] = true
+		result = append(result, places[nearest])
+		current = nearest
+	}
+	return steps, result
+}
+
 // schedulePlaces assigns DayNumber and SequenceOrder to places by:
 // 1. Ordering them with nearest-neighbor (geographically close places together)
 // 2. Distributing evenly across the trip days (max 4 places per day)
@@ -642,4 +800,179 @@ func schedulePlaces(places []domain.TripSchedule, startDate, endDate time.Time) 
 	}
 
 	return ordered, unscheduled
+}
+
+func (s *tripService) GetPlanTrace(ctx context.Context, userID, tripID uint) (*domain.PlanTrace, error) {
+	allowed, err := s.repo.IsUserInTripRoom(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, domain.ErrForbidden
+	}
+
+	trip, err := s.repo.GetByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+
+	schedules, err := s.repo.GetSchedulesByTripID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+
+	var attractions []domain.TripSchedule
+	var restaurants []domain.TripSchedule
+	for _, sc := range schedules {
+		switch sc.Type {
+		case "attraction":
+			attractions = append(attractions, sc)
+		case "restaurant":
+			restaurants = append(restaurants, sc)
+		}
+	}
+
+	// Step 1: AI recommendations = all attractions regardless of schedule status.
+	aiRecs := make([]domain.PlanTracePlace, len(attractions))
+	for i, a := range attractions {
+		aiRecs[i] = domain.PlanTracePlace{
+			Name: a.PlaceName, PlaceID: a.PlaceID,
+			Latitude: a.Latitude, Longitude: a.Longitude,
+		}
+	}
+
+	// Normalize for re-running the algorithm (strip day/seq).
+	normalized := make([]domain.TripSchedule, len(attractions))
+	for i, a := range attractions {
+		normalized[i] = a
+		normalized[i].DayNumber = 0
+		normalized[i].SequenceOrder = 0
+	}
+
+	// Step 2: Re-run nearest-neighbor with trace.
+	nnSteps, ordered := nearestNeighborOrderWithTrace(normalized)
+
+	orderedPlaces := make([]domain.PlanTracePlace, len(ordered))
+	for i, a := range ordered {
+		orderedPlaces[i] = domain.PlanTracePlace{
+			Name: a.PlaceName, PlaceID: a.PlaceID,
+			Latitude: a.Latitude, Longitude: a.Longitude,
+		}
+	}
+
+	// Step 3: Distribute across days.
+	const maxPlacesPerDay = 4
+	totalDays := int(trip.EndDate.Sub(trip.StartDate).Hours()/24) + 1
+	if totalDays < 1 {
+		totalDays = 1
+	}
+
+	maxPlaces := totalDays * maxPlacesPerDay
+	var unscheduledRaw []domain.TripSchedule
+	if len(ordered) > maxPlaces {
+		unscheduledRaw = ordered[maxPlaces:]
+		ordered = ordered[:maxPlaces]
+	}
+
+	placesPerDay := (len(ordered) + totalDays - 1) / totalDays
+	if placesPerDay < 1 {
+		placesPerDay = 1
+	}
+	if placesPerDay > maxPlacesPerDay {
+		placesPerDay = maxPlacesPerDay
+	}
+
+	scheduledPlaces := make([]domain.ScheduledPlaceTrace, len(ordered))
+	for i, a := range ordered {
+		day := i/placesPerDay + 1
+		if day > totalDays {
+			day = totalDays
+		}
+		scheduledPlaces[i] = domain.ScheduledPlaceTrace{
+			Name: a.PlaceName, PlaceID: a.PlaceID,
+			Latitude: a.Latitude, Longitude: a.Longitude,
+			DayNumber:     day,
+			SequenceOrder: i%placesPerDay + 1,
+		}
+	}
+
+	unscheduledPlaces := make([]domain.PlanTracePlace, len(unscheduledRaw))
+	for i, u := range unscheduledRaw {
+		unscheduledPlaces[i] = domain.PlanTracePlace{
+			Name: u.PlaceName, PlaceID: u.PlaceID,
+			Latitude: u.Latitude, Longitude: u.Longitude,
+		}
+	}
+
+	// Step 4: Meal selections — match saved restaurants to their anchor attractions.
+	type mealDef struct {
+		name      string
+		seq       int
+		anchorIdx int // index into the day's attraction list (0-based, before seq-shift)
+	}
+	mealDefs := []mealDef{
+		{"breakfast", 1, 0},
+		{"lunch", 4, 1},
+		{"dinner", 7, 3},
+	}
+
+	attrByDay := map[int][]domain.ScheduledPlaceTrace{}
+	for _, a := range scheduledPlaces {
+		attrByDay[a.DayNumber] = append(attrByDay[a.DayNumber], a)
+	}
+
+	restByDaySeq := map[[2]int]domain.TripSchedule{}
+	for _, r := range restaurants {
+		restByDaySeq[[2]int{r.DayNumber, r.SequenceOrder}] = r
+	}
+
+	var mealDetails []domain.MealSelectionDetail
+	for day := 1; day <= totalDays; day++ {
+		dayAttrs := attrByDay[day]
+		for _, m := range mealDefs {
+			r, ok := restByDaySeq[[2]int{day, m.seq}]
+			if !ok {
+				continue
+			}
+			anchorIdx := m.anchorIdx
+			if anchorIdx >= len(dayAttrs) {
+				if len(dayAttrs) == 0 {
+					continue
+				}
+				anchorIdx = len(dayAttrs) - 1
+			}
+			anchor := dayAttrs[anchorIdx]
+			dist := math.Round(haversine(anchor.Latitude, anchor.Longitude, r.Latitude, r.Longitude)*100) / 100
+
+			mealDetails = append(mealDetails, domain.MealSelectionDetail{
+				MealType:      m.name,
+				DayNumber:     day,
+				SequenceOrder: m.seq,
+				AnchorPlace: domain.PlanTracePlace{
+					Name: anchor.Name, PlaceID: anchor.PlaceID,
+					Latitude: anchor.Latitude, Longitude: anchor.Longitude,
+				},
+				SelectedPlace: domain.PlanTracePlace{
+					Name: r.PlaceName, PlaceID: r.PlaceID,
+					Latitude: r.Latitude, Longitude: r.Longitude,
+				},
+				DistanceKm: dist,
+			})
+		}
+	}
+
+	return &domain.PlanTrace{
+		TripID:               trip.TripID,
+		DestinationName:      trip.DestinationName,
+		StartDate:            trip.StartDate.Format("2006-01-02"),
+		EndDate:              trip.EndDate.Format("2006-01-02"),
+		TotalDays:            totalDays,
+		PlacesPerDay:         placesPerDay,
+		AIRecommendations:    aiRecs,
+		NearestNeighborSteps: nnSteps,
+		OrderedPlaces:        orderedPlaces,
+		ScheduledPlaces:      scheduledPlaces,
+		UnscheduledPlaces:    unscheduledPlaces,
+		MealSelections:       mealDetails,
+	}, nil
 }

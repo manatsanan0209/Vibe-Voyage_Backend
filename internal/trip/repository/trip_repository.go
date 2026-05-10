@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/manatsanan0209/Vibe-Voyage_Backend/internal/domain"
 	"gorm.io/gorm"
@@ -67,6 +68,68 @@ func (r *tripRepository) GetUserRoleInTripRoom(ctx context.Context, userID, trip
 	}
 
 	return row.Role, true, nil
+}
+
+func (r *tripRepository) GetTripRoomMembership(ctx context.Context, userID, tripID uint) (*domain.TripRoomMembership, bool, error) {
+	var row struct {
+		TripID              uint
+		RoomID              uint
+		DestinationName     string
+		DestinationID       string
+		StartDate           time.Time
+		EndDate             time.Time
+		StructuredLifestyle *string
+		Version             int
+		RoomMemberID        uint
+		Role                int
+	}
+
+	err := r.db.WithContext(ctx).
+		Table("trips t").
+		Select(`
+			t.trip_id,
+			t.room_id,
+			t.destination_name,
+			t.destination_id,
+			t.start_date,
+			t.end_date,
+			t.structured_lifestyle,
+			t.version,
+			rm.room_member_id,
+			rm.role
+		`).
+		Joins("JOIN room_members rm ON rm.room_id = t.room_id AND rm.deleted_at IS NULL").
+		Where("t.trip_id = ? AND t.deleted_at IS NULL AND rm.user_id = ?", tripID, userID).
+		Limit(1).
+		Scan(&row).Error
+	if err != nil {
+		return nil, false, err
+	}
+	if row.TripID == 0 || row.RoomMemberID == 0 {
+		return nil, false, nil
+	}
+
+	structuredLifestyle := ""
+	if row.StructuredLifestyle != nil {
+		structuredLifestyle = *row.StructuredLifestyle
+	}
+
+	trip := &domain.Trips{
+		TripID:              row.TripID,
+		RoomID:              row.RoomID,
+		DestinationName:     row.DestinationName,
+		DestinationID:       row.DestinationID,
+		StartDate:           row.StartDate,
+		EndDate:             row.EndDate,
+		StructuredLifeStyle: structuredLifestyle,
+		Version:             row.Version,
+	}
+
+	return &domain.TripRoomMembership{
+		Trip:         trip,
+		RoomMemberID: row.RoomMemberID,
+		Role:         row.Role,
+	}, true, nil
 }
 
 func (r *tripRepository) GetSchedulesByTripID(ctx context.Context, tripID uint) ([]domain.TripSchedule, error) {
@@ -288,6 +351,18 @@ func (r *tripRepository) ReplaceSchedulesByTripID(ctx context.Context, tripID ui
 
 		return nil
 	})
+}
+
+func (r *tripRepository) GetTripsByUserID(ctx context.Context, userID uint) ([]domain.Trips, error) {
+	var trips []domain.Trips
+	err := r.db.WithContext(ctx).
+		Joins("JOIN room_members rm ON rm.room_id = trips.room_id AND rm.deleted_at IS NULL").
+		Where("rm.user_id = ?", userID).
+		Find(&trips).Error
+	if err != nil {
+		return nil, err
+	}
+	return trips, nil
 }
 
 func (r *tripRepository) ReplaceScheduleAndSnapshot(ctx context.Context, tripID uint, schedules []domain.TripSchedule, snapshot string) error {

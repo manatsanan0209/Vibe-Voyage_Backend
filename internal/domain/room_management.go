@@ -63,19 +63,30 @@ type MemberLifestyleSubmissionStatus struct {
 	RoomID                uint
 	UserID                uint
 	Username              string
+	ProfileImage          string
 	Role                  int
 	HasSubmittedLifestyle bool
 	HasAnalyzedLifestyle  bool
 	SubmittedLifestyleID  *uint
 }
 
+type UpdateRoomInput struct {
+	RoomName  *string
+	RoomImage *string
+}
+
 type RoomRepository interface {
 	GetByRoomID(ctx context.Context, roomID uint) ([]RoomMember, error)
 	GetRoomsByUserID(ctx context.Context, userID uint) ([]UserRoomSummary, error)
+	GetMemberLifestyleStatusesByRoomID(ctx context.Context, roomID uint) ([]MemberLifestyleSubmissionStatus, error)
 	GetByID(ctx context.Context, roomMemberID uint) (*RoomMember, error)
 	AddMember(ctx context.Context, member *RoomMember) (*RoomMember, error)
 	DeleteMember(ctx context.Context, roomMemberID uint) error
 	ExistsByRoomAndUser(ctx context.Context, roomID, userID uint) (bool, error)
+	GetRoomInfoByID(ctx context.Context, roomID uint) (*Room, error)
+	UpdateRoom(ctx context.Context, roomID uint, input UpdateRoomInput) (*Room, error)
+	UpdateMemberRole(ctx context.Context, roomMemberID uint, role int) (*RoomMember, error)
+	TransferOwnership(ctx context.Context, roomID, currentOwnerMemberID, newOwnerMemberID uint) error
 }
 
 type RoomService interface {
@@ -90,4 +101,7 @@ type RoomService interface {
 	JoinByInviteCode(ctx context.Context, userID uint, inviteCode string) (*RoomMember, error)
 	ListInviteCodes(ctx context.Context, roomID, requesterUserID uint) ([]RoomInviteCode, error)
 	ListInviteCodeHistory(ctx context.Context, roomID, requesterUserID uint) ([]RoomInviteCode, error)
+	UpdateRoom(ctx context.Context, roomID, requesterUserID uint, input UpdateRoomInput) (*Room, error)
+	UpdateMemberRole(ctx context.Context, roomID, requesterUserID, roomMemberID uint, role int) (*RoomMember, error)
+	TransferOwnership(ctx context.Context, roomID, currentOwnerUserID, newOwnerUserID uint) error
 }

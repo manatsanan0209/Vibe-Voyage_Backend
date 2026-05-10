@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -710,6 +711,471 @@ func buildScoreboard(states map[uint]*memberRescheduleState) []domain.Reschedule
 		})
 	}
 	return scoreboard
+}
+
+// ── Reschedule trace types (internal to service package) ──────────────────────
+
+type rescheduleScoreUpdate struct {
+	UserID   uint
+	Username string
+	Gained   float64
+	Reason   string
+	OldScore float64
+	NewScore float64
+}
+
+type fairnessRoundRecord struct {
+	Round                  int
+	PickedMemberID         uint
+	PickedMemberUsername   string
+	EffectiveScoreBefore   float64
+	IsDeferred             bool
+	DeferReason            string
+	SelectedPlace          *rankedCandidate
+	DistanceFromPrevKm     float64
+	DistanceFromCentroidKm float64
+	ScoreUpdates           []rescheduleScoreUpdate
+	MemberStatesAfter      []domain.RescheduleMemberStateTrace
+}
+
+func snapshotMemberStates(states map[uint]*memberRescheduleState) []domain.RescheduleMemberStateTrace {
+	ids := make([]uint, 0, len(states))
+	for id := range states {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	result := make([]domain.RescheduleMemberStateTrace, 0, len(states))
+	for _, id := range ids {
+		st := states[id]
+		result = append(result, domain.RescheduleMemberStateTrace{
+			UserID:         st.UserID,
+			Username:       st.Username,
+			Score:          st.Score,
+			EffectiveScore: st.Score + float64(st.DeferredCount)*deferredBonusScore,
+			TimesServed:    st.TimesServed,
+			DeferredCount:  st.DeferredCount,
+		})
+	}
+	return result
+}
+
+// runFairnessSelectionWithTrace mirrors runFairnessSelection exactly but also
+// records a FairnessRoundRecord for every turn (including deferred turns).
+func runFairnessSelectionWithTrace(states map[uint]*memberRescheduleState) ([]rankedCandidate, int, []fairnessRoundRecord) {
+	selected := make([]rankedCandidate, 0)
+	selectedByPlaceID := map[string]bool{}
+	centroid := calculateCandidatesCentroid(states)
+	roundCount := 0
+	failedTurns := 0
+	records := make([]fairnessRoundRecord, 0)
+
+	for {
+		activeIDs := activeMemberIDs(states, selectedByPlaceID)
+		if len(activeIDs) == 0 {
+			break
+		}
+
+		nextMemberID := pickNextMemberID(activeIDs, states)
+		memberState := states[nextMemberID]
+		roundCount++
+
+		effectiveBefore := memberState.Score + float64(memberState.DeferredCount)*deferredBonusScore
+
+		candidate, found := findBestCandidateForMember(memberState, selected, selectedByPlaceID, centroid)
+		if !found {
+			memberState.DeferredCount++
+			failedTurns++
+			records = append(records, fairnessRoundRecord{
+				Round:                roundCount,
+				PickedMemberID:       nextMemberID,
+				PickedMemberUsername: memberState.Username,
+				EffectiveScoreBefore: effectiveBefore,
+				IsDeferred:           true,
+				DeferReason:          "distance_constraint_failed",
+				MemberStatesAfter:    snapshotMemberStates(states),
+			})
+			if failedTurns >= len(activeIDs) {
+				break
+			}
+			continue
+		}
+
+		failedTurns = 0
+
+		distFromPrev := 0.0
+		if len(selected) > 0 && hasCoordinates(candidate.Latitude, candidate.Longitude) {
+			if last := selected[len(selected)-1]; hasCoordinates(last.Latitude, last.Longitude) {
+				distFromPrev = math.Round(haversine(candidate.Latitude, candidate.Longitude, last.Latitude, last.Longitude)*100) / 100
+			}
+		}
+		distFromCentroid := 0.0
+		if centroid != nil && hasCoordinates(candidate.Latitude, candidate.Longitude) {
+			distFromCentroid = math.Round(haversine(candidate.Latitude, candidate.Longitude, centroid.Latitude, centroid.Longitude)*100) / 100
+		}
+
+		selected = append(selected, candidate)
+		selectedByPlaceID[candidate.PlaceID] = true
+
+		updates := []rescheduleScoreUpdate{}
+
+		oldOwnerScore := memberState.Score
+		memberState.Score += ownerGainScore
+		memberState.TimesServed++
+		memberState.DeferredCount = 0
+		memberState.LastSelectedRound = roundCount
+		updates = append(updates, rescheduleScoreUpdate{
+			UserID: memberState.UserID, Username: memberState.Username,
+			Gained: ownerGainScore, Reason: "owner_pick",
+			OldScore: oldOwnerScore, NewScore: memberState.Score,
+		})
+
+		sharedGains := map[uint]float64{}
+		if candidate.Category != "" {
+			normalizedCategory := normalizeCategory(candidate.Category)
+			for uid, st := range states {
+				if uid == memberState.UserID {
+					continue
+				}
+				rank, ok := st.CategoryRank[normalizedCategory]
+				if !ok {
+					continue
+				}
+				gain := sharedGainByCategoryRank(rank)
+				if gain > sharedGains[uid] {
+					sharedGains[uid] = gain
+				}
+			}
+		}
+		for uid, gain := range sharedGains {
+			st := states[uid]
+			old := st.Score
+			st.Score += gain
+			updates = append(updates, rescheduleScoreUpdate{
+				UserID: st.UserID, Username: st.Username,
+				Gained: gain, Reason: fmt.Sprintf("shared_category_rank_%d", st.CategoryRank[normalizeCategory(candidate.Category)]),
+				OldScore: old, NewScore: st.Score,
+			})
+		}
+		sort.Slice(updates, func(i, j int) bool { return updates[i].UserID < updates[j].UserID })
+
+		cp := candidate
+		records = append(records, fairnessRoundRecord{
+			Round:                  roundCount,
+			PickedMemberID:         nextMemberID,
+			PickedMemberUsername:   memberState.Username,
+			EffectiveScoreBefore:   effectiveBefore,
+			IsDeferred:             false,
+			SelectedPlace:          &cp,
+			DistanceFromPrevKm:     distFromPrev,
+			DistanceFromCentroidKm: distFromCentroid,
+			ScoreUpdates:           updates,
+			MemberStatesAfter:      snapshotMemberStates(states),
+		})
+	}
+
+	return selected, roundCount, records
+}
+
+func (s *tripService) GetReschedulePlanTrace(ctx context.Context, userID, tripID uint) (*domain.ReschedulePlanTrace, error) {
+	allowed, err := s.repo.IsUserInTripRoom(ctx, userID, tripID)
+	if err != nil {
+		return nil, err
+	}
+	if !allowed {
+		return nil, domain.ErrForbidden
+	}
+
+	trip, err := s.repo.GetByID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+
+	members, err := s.roomSvc.GetMembersByRoomID(ctx, trip.RoomID)
+	if err != nil {
+		return nil, err
+	}
+
+	states := make(map[uint]*memberRescheduleState)
+	notReadyMembers := make([]domain.RescheduleNotReadyMember, 0)
+	namesToResolve := make([]string, 0)
+
+	for _, member := range members {
+		if member.Role != domain.RoleOwner && member.Role != domain.RoleMember {
+			continue
+		}
+		lifestyle, err := s.lifestyleSvc.GetLifestyle(ctx, member.UserID, trip.RoomID)
+		if err != nil {
+			if errors.Is(err, domain.ErrLifestyleNotFound) {
+				notReadyMembers = append(notReadyMembers, domain.RescheduleNotReadyMember{
+					UserID: member.UserID, Username: member.User.Username,
+				})
+				continue
+			}
+			return nil, err
+		}
+		lifestyleID := lifestyle.LifestyleID
+		if !domain.IsStructuredLifestyleValid(lifestyle.StructuredLifestyle) {
+			notReadyMembers = append(notReadyMembers, domain.RescheduleNotReadyMember{
+				UserID: member.UserID, Username: member.User.Username, LifestyleID: &lifestyleID,
+			})
+			continue
+		}
+		candidates, err := parseStructuredLifestylePlaces(*lifestyle.StructuredLifestyle)
+		if err != nil {
+			notReadyMembers = append(notReadyMembers, domain.RescheduleNotReadyMember{
+				UserID: member.UserID, Username: member.User.Username, LifestyleID: &lifestyleID,
+			})
+			continue
+		}
+		candidates = dedupeCandidatesByPlaceID(candidates)
+		for _, c := range candidates {
+			if c.PlaceID == "" {
+				namesToResolve = append(namesToResolve, c.Name)
+			}
+		}
+		states[member.UserID] = &memberRescheduleState{
+			UserID: member.UserID, Username: member.User.Username,
+			Candidates: candidates, CategoryRank: map[string]int{}, LastSelectedRound: -1,
+		}
+	}
+
+	if len(notReadyMembers) > 0 {
+		sort.Slice(notReadyMembers, func(i, j int) bool { return notReadyMembers[i].UserID < notReadyMembers[j].UserID })
+		return nil, &domain.RescheduleAnalysisNotReadyError{NotReadyMembers: notReadyMembers}
+	}
+
+	if len(namesToResolve) > 0 {
+		attractionsByName, err := s.repo.GetAttractionsByNames(ctx, namesToResolve)
+		if err != nil {
+			return nil, err
+		}
+		for _, state := range states {
+			resolved := make([]rankedCandidate, 0, len(state.Candidates))
+			for _, c := range state.Candidates {
+				if c.PlaceID == "" {
+					c.PlaceID = resolveAttractionIDFromCandidates(c, attractionsByName[strings.ToLower(strings.TrimSpace(c.Name))])
+				}
+				if c.PlaceID == "" {
+					continue
+				}
+				resolved = append(resolved, c)
+			}
+			state.Candidates = resolved
+			state.CategoryRank = buildCategoryRank(resolved)
+		}
+	} else {
+		for _, state := range states {
+			state.CategoryRank = buildCategoryRank(state.Candidates)
+		}
+	}
+
+	// Step 1: Build member + candidates summary
+	centroid := calculateCandidatesCentroid(states)
+	memberTraces := make([]domain.RescheduleMemberCandidateTrace, 0, len(states))
+	memberIDs := make([]uint, 0, len(states))
+	for id := range states {
+		memberIDs = append(memberIDs, id)
+	}
+	sort.Slice(memberIDs, func(i, j int) bool { return memberIDs[i] < memberIDs[j] })
+	for _, id := range memberIDs {
+		st := states[id]
+		candidateTraces := make([]domain.RescheduleCandidateTrace, len(st.Candidates))
+		for i, c := range st.Candidates {
+			candidateTraces[i] = domain.RescheduleCandidateTrace{
+				Name: c.Name, PlaceID: c.PlaceID, Category: c.Category,
+				Latitude: c.Latitude, Longitude: c.Longitude,
+			}
+		}
+		memberTraces = append(memberTraces, domain.RescheduleMemberCandidateTrace{
+			UserID: st.UserID, Username: st.Username,
+			Candidates:   candidateTraces,
+			CategoryRank: st.CategoryRank,
+		})
+	}
+
+	var centroidTrace *domain.GeoPointTrace
+	if centroid != nil {
+		centroidTrace = &domain.GeoPointTrace{Latitude: centroid.Latitude, Longitude: centroid.Longitude}
+	}
+
+	// Step 2: Fairness selection with trace
+	orderedCandidates, totalRounds, roundRecords := runFairnessSelectionWithTrace(states)
+
+	fairnessRounds := make([]domain.FairnessRoundTrace, len(roundRecords))
+	for i, r := range roundRecords {
+		var selPlace *domain.RescheduleCandidateTrace
+		if r.SelectedPlace != nil {
+			cp := domain.RescheduleCandidateTrace{
+				Name: r.SelectedPlace.Name, PlaceID: r.SelectedPlace.PlaceID,
+				Category: r.SelectedPlace.Category,
+				Latitude: r.SelectedPlace.Latitude, Longitude: r.SelectedPlace.Longitude,
+			}
+			selPlace = &cp
+		}
+		scoreUpdates := make([]domain.RescheduleScoreUpdateTrace, len(r.ScoreUpdates))
+		for j, u := range r.ScoreUpdates {
+			scoreUpdates[j] = domain.RescheduleScoreUpdateTrace{
+				UserID: u.UserID, Username: u.Username, Gained: u.Gained, Reason: u.Reason,
+				OldScore: u.OldScore, NewScore: u.NewScore,
+			}
+		}
+		fairnessRounds[i] = domain.FairnessRoundTrace{
+			Round:                  r.Round,
+			PickedMemberID:         r.PickedMemberID,
+			PickedMemberUsername:   r.PickedMemberUsername,
+			EffectiveScoreBefore:   r.EffectiveScoreBefore,
+			IsDeferred:             r.IsDeferred,
+			DeferReason:            r.DeferReason,
+			SelectedPlace:          selPlace,
+			DistanceFromPrevKm:     r.DistanceFromPrevKm,
+			DistanceFromCentroidKm: r.DistanceFromCentroidKm,
+			ScoreUpdates:           scoreUpdates,
+			MemberStatesAfter:      r.MemberStatesAfter,
+		}
+	}
+
+	fairnessOrdered := make([]domain.RescheduleCandidateTrace, len(orderedCandidates))
+	for i, c := range orderedCandidates {
+		fairnessOrdered[i] = domain.RescheduleCandidateTrace{
+			Name: c.Name, PlaceID: c.PlaceID, Category: c.Category,
+			Latitude: c.Latitude, Longitude: c.Longitude,
+		}
+	}
+
+	// Step 3: Nearest-neighbor ordering
+	attractions := make([]domain.TripSchedule, len(orderedCandidates))
+	for i, c := range orderedCandidates {
+		attractions[i] = domain.TripSchedule{
+			PlaceName: c.Name, PlaceID: c.PlaceID,
+			Latitude: c.Latitude, Longitude: c.Longitude,
+		}
+	}
+	nnSteps, nnOrdered := nearestNeighborOrderWithTrace(attractions)
+	nnOrderedPlaces := make([]domain.PlanTracePlace, len(nnOrdered))
+	for i, a := range nnOrdered {
+		nnOrderedPlaces[i] = domain.PlanTracePlace{
+			Name: a.PlaceName, PlaceID: a.PlaceID,
+			Latitude: a.Latitude, Longitude: a.Longitude,
+		}
+	}
+
+	// Step 4: Day distribution
+	const maxPlacesPerDay = 4
+	totalDays := int(trip.EndDate.Sub(trip.StartDate).Hours()/24) + 1
+	if totalDays < 1 {
+		totalDays = 1
+	}
+	maxPlaces := totalDays * maxPlacesPerDay
+	var unscheduledRaw []domain.TripSchedule
+	if len(nnOrdered) > maxPlaces {
+		unscheduledRaw = nnOrdered[maxPlaces:]
+		nnOrdered = nnOrdered[:maxPlaces]
+	}
+	placesPerDay := (len(nnOrdered) + totalDays - 1) / totalDays
+	if placesPerDay < 1 {
+		placesPerDay = 1
+	}
+	if placesPerDay > maxPlacesPerDay {
+		placesPerDay = maxPlacesPerDay
+	}
+	scheduledPlaces := make([]domain.ScheduledPlaceTrace, len(nnOrdered))
+	for i, a := range nnOrdered {
+		day := i/placesPerDay + 1
+		if day > totalDays {
+			day = totalDays
+		}
+		scheduledPlaces[i] = domain.ScheduledPlaceTrace{
+			Name: a.PlaceName, PlaceID: a.PlaceID,
+			Latitude: a.Latitude, Longitude: a.Longitude,
+			DayNumber: day, SequenceOrder: i%placesPerDay + 1,
+		}
+	}
+	unscheduledPlaces := make([]domain.PlanTracePlace, len(unscheduledRaw))
+	for i, u := range unscheduledRaw {
+		unscheduledPlaces[i] = domain.PlanTracePlace{
+			Name: u.PlaceName, PlaceID: u.PlaceID,
+			Latitude: u.Latitude, Longitude: u.Longitude,
+		}
+	}
+
+	// Step 5: Meals — read from current DB schedules
+	schedules, err := s.repo.GetSchedulesByTripID(ctx, tripID)
+	if err != nil {
+		return nil, err
+	}
+	var restaurants []domain.TripSchedule
+	for _, sc := range schedules {
+		if sc.Type == "restaurant" {
+			restaurants = append(restaurants, sc)
+		}
+	}
+
+	type mealDef struct {
+		name      string
+		seq       int
+		anchorIdx int
+	}
+	mealDefs := []mealDef{
+		{"breakfast", 1, 0},
+		{"lunch", 4, 1},
+		{"dinner", 7, 3},
+	}
+	attrByDay := map[int][]domain.ScheduledPlaceTrace{}
+	for _, a := range scheduledPlaces {
+		attrByDay[a.DayNumber] = append(attrByDay[a.DayNumber], a)
+	}
+	restByDaySeq := map[[2]int]domain.TripSchedule{}
+	for _, r := range restaurants {
+		restByDaySeq[[2]int{r.DayNumber, r.SequenceOrder}] = r
+	}
+	var mealDetails []domain.MealSelectionDetail
+	for day := 1; day <= totalDays; day++ {
+		dayAttrs := attrByDay[day]
+		for _, m := range mealDefs {
+			r, ok := restByDaySeq[[2]int{day, m.seq}]
+			if !ok {
+				continue
+			}
+			anchorIdx := m.anchorIdx
+			if anchorIdx >= len(dayAttrs) {
+				if len(dayAttrs) == 0 {
+					continue
+				}
+				anchorIdx = len(dayAttrs) - 1
+			}
+			anchor := dayAttrs[anchorIdx]
+			dist := math.Round(haversine(anchor.Latitude, anchor.Longitude, r.Latitude, r.Longitude)*100) / 100
+			mealDetails = append(mealDetails, domain.MealSelectionDetail{
+				MealType: m.name, DayNumber: day, SequenceOrder: m.seq,
+				AnchorPlace: domain.PlanTracePlace{
+					Name: anchor.Name, PlaceID: anchor.PlaceID,
+					Latitude: anchor.Latitude, Longitude: anchor.Longitude,
+				},
+				SelectedPlace: domain.PlanTracePlace{
+					Name: r.PlaceName, PlaceID: r.PlaceID,
+					Latitude: r.Latitude, Longitude: r.Longitude,
+				},
+				DistanceKm: dist,
+			})
+		}
+	}
+
+	return &domain.ReschedulePlanTrace{
+		TripID: trip.TripID, DestinationName: trip.DestinationName,
+		StartDate: trip.StartDate.Format("2006-01-02"), EndDate: trip.EndDate.Format("2006-01-02"),
+		TotalDays: totalDays, PlacesPerDay: placesPerDay,
+		Step1Members:               memberTraces,
+		Step1Centroid:              centroidTrace,
+		Step2FairnessRounds:        fairnessRounds,
+		Step2FairnessOrderedPlaces: fairnessOrdered,
+		Step2TotalRounds:           totalRounds,
+		Step3NearestNeighborSteps:  nnSteps,
+		Step3OrderedPlaces:         nnOrderedPlaces,
+		Step4ScheduledPlaces:       scheduledPlaces,
+		Step4UnscheduledPlaces:     unscheduledPlaces,
+		Step5MealSelections:        mealDetails,
+	}, nil
 }
 
 func (s *tripService) notifyScheduleUpdatedMembers(members []domain.RoomMember, actorUserID, tripID uint) {

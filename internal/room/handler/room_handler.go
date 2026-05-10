@@ -30,6 +30,9 @@ func (h *roomHandler) RegisterRoutes(app *fiber.App) {
 	api.Get("/:roomID/invite-codes", h.ListInviteCodes)
 	api.Post("/:roomID/invite-codes", h.CreateInviteCode)
 	api.Post("/join-by-invite-code", h.JoinByInviteCode)
+	api.Patch("/:roomID/settings", h.UpdateRoom)
+	api.Patch("/:roomID/members/:memberID/role", h.UpdateMemberRole)
+	api.Patch("/:roomID/transfer-ownership", h.TransferOwnership)
 }
 
 func (h *roomHandler) GetRoomsByUserID(c *fiber.Ctx) error {

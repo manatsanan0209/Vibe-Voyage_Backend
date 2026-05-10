@@ -14,6 +14,52 @@ func (r *roomRepository) GetByRoomID(ctx context.Context, roomID uint) ([]domain
 	return members, nil
 }
 
+func (r *roomRepository) GetMemberLifestyleStatusesByRoomID(ctx context.Context, roomID uint) ([]domain.MemberLifestyleSubmissionStatus, error) {
+	members, err := r.GetByRoomID(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	var lifestyles []domain.UserLifestyle
+	if err := r.db.WithContext(ctx).
+		Where("room_id = ?", roomID).
+		Find(&lifestyles).Error; err != nil {
+		return nil, err
+	}
+
+	lifestyleByUserID := make(map[uint]domain.UserLifestyle, len(lifestyles))
+	for _, lifestyle := range lifestyles {
+		lifestyleByUserID[lifestyle.UserID] = lifestyle
+	}
+
+	result := make([]domain.MemberLifestyleSubmissionStatus, 0, len(members))
+	for _, member := range members {
+		lifestyle, hasSubmitted := lifestyleByUserID[member.UserID]
+
+		var submittedLifestyleID *uint
+		hasAnalyzed := false
+		if hasSubmitted {
+			id := lifestyle.LifestyleID
+			submittedLifestyleID = &id
+			hasAnalyzed = domain.IsStructuredLifestyleValid(lifestyle.StructuredLifestyle)
+		}
+
+		result = append(result, domain.MemberLifestyleSubmissionStatus{
+			RoomMemberID:          member.RoomMemberID,
+			RoomID:                member.RoomID,
+			UserID:                member.UserID,
+			Username:              member.User.Username,
+			ProfileImage:          member.User.ProfileImage,
+			Role:                  member.Role,
+			HasSubmittedLifestyle: hasSubmitted,
+			HasAnalyzedLifestyle:  hasAnalyzed,
+			SubmittedLifestyleID:  submittedLifestyleID,
+		})
+	}
+
+	return result, nil
+}
+
 func (r *roomRepository) AddMember(ctx context.Context, member *domain.RoomMember) (*domain.RoomMember, error) {
 	if err := r.db.WithContext(ctx).Create(member).Error; err != nil {
 		return nil, err
