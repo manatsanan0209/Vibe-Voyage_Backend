@@ -78,3 +78,24 @@ type RoomInviteCodeResponseDTO struct {
 	ExpireTime          *string `json:"expire_time"`
 	CreatedAt           string  `json:"created_at"`
 }
+
+type UpdateRoomRequestDTO struct {
+	RoomName  *string `json:"room_name"`
+	RoomImage *string `json:"room_image"`
+}
+
+type UpdateRoomResponseDTO struct {
+	RoomID    uint   `json:"room_id"`
+	OwnerID   uint   `json:"owner_id"`
+	RoomName  string `json:"room_name"`
+	RoomImage string `json:"room_image"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type UpdateMemberRoleRequestDTO struct {
+	Role int `json:"role"`
+}
+
+type TransferOwnershipRequestDTO struct {
+	NewOwnerUserID uint `json:"new_owner_user_id"`
+}

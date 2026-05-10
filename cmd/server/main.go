@@ -22,20 +22,23 @@ import (
 	userLifestyleService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user_lifestyle/service"
 
 	attractionPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction"
+	attractionRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction/repository"
 	authPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/auth"
 	healthPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/health"
 	hotelPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/hotel"
 	notificationPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/notification"
 	notificationRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/notification/repository"
 	placePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place"
-	settingsPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/settings"
-	settingsRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/settings/repository"
-	attractionRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/attraction/repository"
+	placeDetailClient "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place_detail/client"
+	placeDetailRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place_detail/repository"
+	placeDetailService "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/place_detail/service"
 	restaurantPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant"
 	restaurantRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/restaurant/repository"
 	roomPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room"
 	roomRepoPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/repository"
 	roomServicePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/room/service"
+	settingsPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/settings"
+	settingsRepo "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/settings/repository"
 	tripPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/trip"
 	userPkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user"
 	userLifestylePkg "github.com/manatsanan0209/Vibe-Voyage_Backend/internal/user_lifestyle"
@@ -62,6 +65,7 @@ func Run() error {
 		&domain.PublishedTrip{},
 		&domain.TripLike{},
 		&domain.TripBookmark{},
+		&domain.GooglePlaceDetail{},
 	)
 	if err != nil {
 		log.Fatal("Migration failed:", err)
@@ -93,11 +97,14 @@ func Run() error {
 	settingsRepository := settingsRepo.NewUserSettingsRepository(gormDB)
 	notifRepository := notificationRepo.NewNotificationRepository(gormDB)
 	notifSvc := notificationPkg.SetupService(notifRepository, settingsRepository)
-
-	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc, notifSvc)
-	tripSvc := tripService.NewTripService(tripRepository, restaurantRepository, attractionRepository, lifestyleSvc, roomSvc, notifSvc)
+	googlePlaceDetailRepository := placeDetailRepo.NewGooglePlaceDetailRepository(gormDB)
+	googlePlacesClient := placeDetailClient.NewGooglePlacesClientFromEnv()
+	googlePlaceDetailSvc := placeDetailService.NewGooglePlaceDetailService(googlePlaceDetailRepository, googlePlacesClient)
 	tripSuggestionRepository := tripSuggestionRepo.NewTripSuggestionRepository(gormDB)
 	tripSuggestionSvc := tripSuggestionService.NewTripSuggestionService(tripSuggestionRepository)
+
+	roomSvc := roomServicePkg.NewRoomService(roomRepository, roomInviteRepository, lifestyleRepository, lifestyleSvc, notifSvc)
+	tripSvc := tripService.NewTripService(tripRepository, restaurantRepository, attractionRepository, lifestyleSvc, roomSvc, roomRepository, tripSuggestionSvc, notifSvc, googlePlaceDetailSvc)
 
 	healthPkg.RegisterRoutes(app)
 	userPkg.Setup(app, svc, tripSuggestionSvc)

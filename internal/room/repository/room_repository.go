@@ -20,6 +20,70 @@ func NewRoomInviteCodeRepository(db *gorm.DB) domain.RoomInviteCodeRepository {
 	return &roomRepository{db: db}
 }
 
+func (r *roomRepository) GetRoomInfoByID(ctx context.Context, roomID uint) (*domain.Room, error) {
+	var room domain.Room
+	if err := r.db.WithContext(ctx).First(&room, roomID).Error; err != nil {
+		return nil, err
+	}
+	return &room, nil
+}
+
+func (r *roomRepository) UpdateRoom(ctx context.Context, roomID uint, input domain.UpdateRoomInput) (*domain.Room, error) {
+	updates := map[string]interface{}{}
+	if input.RoomName != nil {
+		updates["room_name"] = *input.RoomName
+	}
+	if input.RoomImage != nil {
+		updates["room_image"] = *input.RoomImage
+	}
+	if err := r.db.WithContext(ctx).Model(&domain.Room{}).Where("room_id = ?", roomID).Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return r.GetRoomInfoByID(ctx, roomID)
+}
+
+func (r *roomRepository) UpdateMemberRole(ctx context.Context, roomMemberID uint, role int) (*domain.RoomMember, error) {
+	if err := r.db.WithContext(ctx).Model(&domain.RoomMember{}).
+		Where("room_member_id = ?", roomMemberID).
+		Update("role", role).Error; err != nil {
+		return nil, err
+	}
+	var member domain.RoomMember
+	if err := r.db.WithContext(ctx).Preload("User").First(&member, roomMemberID).Error; err != nil {
+		return nil, err
+	}
+	return &member, nil
+}
+
+func (r *roomRepository) TransferOwnership(ctx context.Context, roomID, currentOwnerMemberID, newOwnerMemberID uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var newMember domain.RoomMember
+		if err := tx.First(&newMember, newOwnerMemberID).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&domain.RoomMember{}).
+			Where("room_member_id = ?", currentOwnerMemberID).
+			Update("role", domain.RoleMember).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&domain.RoomMember{}).
+			Where("room_member_id = ?", newOwnerMemberID).
+			Update("role", domain.RoleOwner).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&domain.Room{}).
+			Where("room_id = ?", roomID).
+			Update("owner_id", newMember.UserID).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
 func (r *roomRepository) GetRoomsByUserID(ctx context.Context, userID uint) ([]domain.UserRoomSummary, error) {
 	type userRoomSummaryRow struct {
 		RoomID        uint
